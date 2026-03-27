@@ -19,6 +19,8 @@ function formatEmployee(emp, idx = 0) {
     ciudad:          emp.ciudad    ?? "",
     direccion:       emp.direccion ?? "",
     fotoPerfil:      emp.fotoPerfil ?? "",
+    image:           emp.fotoPerfil      ?? "",  // alias para el frontend
+    image:           emp.fotoPerfil ?? "",
     estado:          emp.estado,
     isActive:        emp.estado === "Activo",
     color:           COLORS[idx % COLORS.length],
