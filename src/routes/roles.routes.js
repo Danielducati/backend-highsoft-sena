@@ -1,16 +1,22 @@
+// src/routes/roles.routes.js
 const express = require("express");
 const router  = express.Router();
 const {
   getAllRoles, getRolById, createRol, updateRol, deactivateRol,
   getAllPermisos, getPermisosByRol,
 } = require("../controllers/roles.controller");
+const { verificarToken, soloAdmin }                          = require("../middlewares/auth.middleware");
+const { validateCreateRole, validateUpdateRole,
+        validateRoleId }                                     = require("../middlewares/validate.middleware");
 
-router.get("/permisos",      getAllPermisos);
-router.get("/:id/permisos",  getPermisosByRol);
-router.get("/",              getAllRoles);
-router.get("/:id",           getRolById);
-router.post("/",             createRol);
-router.put("/:id",           updateRol);
-router.delete("/:id",        deactivateRol);
+// ⚠️ /permisos debe ir antes de /:id
+router.get("/permisos",     verificarToken,                                     getAllPermisos);
+router.get("/:id/permisos", verificarToken, validateRoleId,                     getPermisosByRol);
+router.get("/",             verificarToken,                                     getAllRoles);
+router.get("/:id",          verificarToken, validateRoleId,                     getRolById);
+router.post("/",            verificarToken, soloAdmin, validateCreateRole,      createRol);
+router.put("/:id",          verificarToken, soloAdmin, validateRoleId,
+                                            validateUpdateRole,                 updateRol);
+router.delete("/:id",       verificarToken, soloAdmin, validateRoleId,          deactivateRol);
 
 module.exports = router;
