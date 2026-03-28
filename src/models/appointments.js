@@ -4,8 +4,8 @@ const prisma = require("../config/prisma");
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatCita(cita) {
   const startTime = cita.horario
-    ? cita.horario.toISOString().slice(11, 16)
-    : "00:00";
+  ? cita.horario.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Bogota" })
+  : "00:00";
 
   const servicios = (cita.detalles ?? []).map(d => ({
     serviceId:    String(d.servicioId),
@@ -69,7 +69,7 @@ const create = async ({ cliente, fecha, hora, notas, servicios }) => {
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-        horario:   new Date(`1970-01-01T${hora}:00`),
+        horario: new Date(`1970-01-01T${hora}:00`),
         notas:     notas ?? null,
         estado:    "Pendiente",
       },
@@ -111,7 +111,7 @@ const update = async (id, { cliente, fecha, hora, notas, servicios }) => {
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-        horario:   new Date(`1970-01-01T${hora}:00`),
+        horario: new Date(`1970-01-01T${hora}:00`),
         notas:     notas ?? null,
       },
     });

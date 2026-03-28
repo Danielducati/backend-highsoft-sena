@@ -53,11 +53,26 @@ const remove = async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!id || isNaN(id))
-      return res.status(400).json({ error: "ID inválido" });
+      return res.status(400).json({ error: "ID invalido" });
 
-    // Verificar si tiene ventas asociadas
+    // Verificar que la cita existe y su estado
+    const cita = await prisma.agendamientoCita.findUnique({ where: { id } });
+    if (!cita)
+      return res.status(404).json({ error: "Cita no encontrada" });
+
+    // Bloquear eliminacion segun estado
+    if (cita.estado === "Completada")
+      return res.status(400).json({
+        error: "No se puede eliminar una cita completada. Ya fue facturada.",
+      });
+
+    if (cita.estado === "Cancelada")
+      return res.status(400).json({
+        error: "No se puede eliminar una cita cancelada. Solo se pueden eliminar citas pendientes.",
+      });
+
+    // Verificar ventas — usar FK_id_cita que es el nombre real en el schema
     const ventas = await prisma.venta.count({ where: { FK_id_cita: id } });
-
     if (ventas > 0)
       return res.status(400).json({
         error: `No se puede eliminar. La cita tiene ${ventas} venta(s) asociada(s)`,
@@ -65,7 +80,9 @@ const remove = async (req, res) => {
 
     await appointmentsModel.remove(req.params.id);
     res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
 module.exports = { getAll, getOne, create, update, updateStatus, cancel, remove };
