@@ -1,64 +1,91 @@
 // src/models/categories.js
 const prisma = require("../config/prisma");
 
-// ── Helpers ───────────────────────────────────────────────────
-function formatCategoria(cat) {
-return {
-    id:          cat.id,
-    nombre:      cat.nombre,
-    descripcion: cat.descripcion ?? "",
-    color:       cat.color       ?? "",
-    estado:      cat.estado,
-    isActive:    cat.estado === "Activo",
-};
-}
-
-// ── Queries ───────────────────────────────────────────────────
-const getAll = async ({ soloActivos = false } = {}) => {
-const categorias = await prisma.categoriaServicio.findMany({
-    where:   soloActivos ? { estado: "Activo" } : {},
+const getAll = async ({ soloActivos = true }) => {
+  const categorias = await prisma.categoriaServicio.findMany({
+    where: soloActivos ? { estado: "Activo" } : {},
+    include: {
+      _count: {
+        select: { servicios: true }
+      }
+    },
     orderBy: { nombre: "asc" },
-});
-return categorias.map(formatCategoria);
+  });
+
+  return categorias.map(cat => ({
+    id:            cat.id,
+    nombre:        cat.nombre,
+    descripcion:   cat.descripcion,
+    color:         cat.color,
+    estado:        cat.estado,
+    servicesCount: cat._count.servicios,
+  }));
 };
 
 const getById = async (id) => {
-const cat = await prisma.categoriaServicio.findUnique({
-    where: { id: Number(id) },
-});
-return cat ? formatCategoria(cat) : null;
+  const cat = await prisma.categoriaServicio.findUnique({
+    where: { id },
+    include: {
+      _count: {
+        select: { servicios: true }
+      }
+    },
+  });
+
+  if (!cat) return null;
+
+  return {
+    id:            cat.id,
+    nombre:        cat.nombre,
+    descripcion:   cat.descripcion,
+    color:         cat.color,
+    estado:        cat.estado,
+    servicesCount: cat._count.servicios,
+  };
 };
 
 const create = async ({ nombre, descripcion, color }) => {
-const cat = await prisma.categoriaServicio.create({
+  const cat = await prisma.categoriaServicio.create({
     data: {
-    nombre,
-    descripcion: descripcion ?? null,
-    color:       color       ?? null,
-    estado:      "Activo",
+      nombre,
+      descripcion,
+      color,
+      estado: "Activo",
     },
-});
-return formatCategoria(cat);
+  });
+
+  return {
+    id:          cat.id,
+    nombre:      cat.nombre,
+    descripcion: cat.descripcion,
+    color:       cat.color,
+    estado:      cat.estado,
+  };
 };
 
 const update = async (id, { nombre, descripcion, color, estado }) => {
-const cat = await prisma.categoriaServicio.update({
-    where: { id: Number(id) },
+  const cat = await prisma.categoriaServicio.update({
+    where: { id },
     data: {
-    nombre,
-    descripcion: descripcion ?? null,
-    color:       color       ?? null,
-    estado:      estado      ?? "Activo",
+      ...(nombre !== undefined && { nombre }),
+      ...(descripcion !== undefined && { descripcion }),
+      ...(color !== undefined && { color }),
+      ...(estado !== undefined && { estado }),
     },
-});
-return formatCategoria(cat);
+  });
+
+  return {
+    id:          cat.id,
+    nombre:      cat.nombre,
+    descripcion: cat.descripcion,
+    color:       cat.color,
+    estado:      cat.estado,
+  };
 };
 
-const deactivate = async (id) => {
-return prisma.categoriaServicio.update({
-    where: { id: Number(id) },
-    data:  { estado: "Inactivo" },
-});
+module.exports = {
+  getAll,
+  getById,
+  create,
+  update,
 };
-
-module.exports = { getAll, getById, create, update, deactivate };
