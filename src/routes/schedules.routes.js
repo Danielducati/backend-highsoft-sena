@@ -1,3 +1,4 @@
+// src/routes/schedules.routes.js
 const express = require("express");
 const router  = express.Router();
 const prisma  = require("../config/prisma");
