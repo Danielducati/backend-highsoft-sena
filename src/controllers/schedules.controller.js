@@ -122,23 +122,41 @@ try {
 }
 };
 
+// Función auxiliar para fechas
+const getRange = (startDate) => {
+    const monday = new Date(startDate + "T00:00:00");
+    const nextMonday = new Date(monday);
+    nextMonday.setDate(monday.getDate() + 7);
+    return { monday, nextMonday };
+};
+
 const remove = async (req, res) => {
-try {
-    const { employeeId, weekStartDate } = req.params;
-    const monday = new Date(weekStartDate + "T00:00:00");
-    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    try {
+        const { employeeId, weekStartDate } = req.params;
+        const { monday, nextMonday } = getRange(weekStartDate);
 
-    await prisma.horario.deleteMany({
-    where: {
-        empleadoId: Number(employeeId),
-        fecha:      { gte: monday, lte: sunday },
-    },
-    });
+        const result = await prisma.horario.deleteMany({
+            where: {
+                empleadoId: Number(employeeId),
+                fecha: {
+                    gte: monday,
+                    lt: nextMonday,
+                },
+            },
+        });
 
-    res.json({ ok: true });
-} catch (err) {
-    res.status(500).json({ error: err.message });
-}
+        // Si result.count es 0, significa que no encontró nada para borrar
+        if (result.count === 0) {
+            return res.status(404).json({ 
+                ok: false, 
+                message: "No se encontraron horarios para borrar en esa semana." 
+            });
+        }
+
+        res.json({ ok: true, deletedCount: result.count });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
 module.exports = { getAll, create, update, remove };
