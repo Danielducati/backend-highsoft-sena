@@ -76,6 +76,26 @@ const updateService = async (req, res) => {
 
     const { nombre, descripcion, categoriaId, duracion, precio, imagenServicio, estado } = req.body;
 
+    // 🔍 Obtener servicio actual
+    const servicioActual = await servicesModel.getById(id);
+    if (!servicioActual)
+      return res.status(404).json({ ok: false, message: "Servicio no encontrado" });
+
+    // 🚫 NO editar si está inactivo (excepto reactivarlo)
+    if (
+      servicioActual.estado === "Inactivo" &&
+      estado !== "Activo"
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message: "No puedes editar un servicio inactivo. Primero debes activarlo."
+      });
+    }
+
+    // ========================
+    // VALIDACIONES
+    // ========================
+
     if (!nombre || typeof nombre !== "string" || nombre.trim() === "")
       return res.status(400).json({ ok: false, message: "El nombre es obligatorio" });
 
@@ -93,7 +113,26 @@ const updateService = async (req, res) => {
 
     const ESTADOS_VALIDOS = ["Activo", "Inactivo"];
     if (estado && !ESTADOS_VALIDOS.includes(estado))
-      return res.status(400).json({ ok: false, message: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(", ")}` });
+      return res.status(400).json({
+        ok: false,
+        message: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(", ")}`
+      });
+
+    // 🔥 VALIDACIÓN PRO: no activar si la categoría está inactiva
+    if (estado === "Activo") {
+      const categoria = await categoriesModel.getById(Number(categoriaId));
+
+      if (!categoria || categoria.estado === "Inactivo") {
+        return res.status(400).json({
+          ok: false,
+          message: "No puedes activar un servicio si su categoría está inactiva"
+        });
+      }
+    }
+
+    // ========================
+    // UPDATE
+    // ========================
 
     const service = await servicesModel.update(id, {
       nombre:        nombre.trim(),
@@ -104,10 +143,13 @@ const updateService = async (req, res) => {
       imagenServicio: imagenServicio ?? null,
       estado,
     });
+
     res.json({ ok: true, data: service });
+
   } catch (error) {
     if (error.code === "P2025")
       return res.status(404).json({ ok: false, message: "Servicio no encontrado" });
+
     console.error("updateService:", error);
     res.status(500).json({ ok: false, message: "Error al actualizar el servicio" });
   }

@@ -76,27 +76,18 @@ const updateCategory = async (req, res) => {
     if (!categoriaActual) {
       return res.status(404).json({ error: "Categoría no encontrada" });
     }
-
-    if (categoriaActual.estado !== "Activo") {
-      return res.status(400).json({ 
-        error: "No se puede editar una categoría que ya está desactivada" 
+    if (
+      categoriaActual.estado === "Inactivo" &&
+      estado !== "Activo"
+    ) {
+      return res.status(400).json({
+        error: "No puedes editar una categoría inactiva. Primero debes activarla."
       });
     }
 
-    if (estado === "Inactivo") {
-      const serviciosActivos = await prisma.servicio.count({
-        where: { 
-          categoriaId: id,
-          estado: "Activo" 
-        },
-      });
-
-      if (serviciosActivos > 0) {
-        return res.status(400).json({
-          error: `No se puede desactivar la categoría porque tiene ${serviciosActivos} servicio(s) activo(s) asociado(s). Primero desactiva los servicios.`,
-        });
-      }
-    }
+    // ========================
+    // VALIDACIONES
+    // ========================
 
     if (nombre !== undefined) {
       if (!nombre || typeof nombre !== "string" || nombre.trim() === "")
@@ -108,11 +99,13 @@ const updateCategory = async (req, res) => {
       if (nombre.trim().length > 100)
         return res.status(400).json({ error: "El nombre no puede superar 100 caracteres" });
 
-      const existe = await prisma.categoriaServicio.findFirst({
-        where: { nombre: nombre.trim(), id: { not: id } },
-      });
-      if (existe)
-        return res.status(409).json({ error: `Ya existe una categoría con el nombre "${nombre.trim()}"` });
+      if (nombre.trim() !== categoriaActual.nombre) {
+        const existe = await prisma.categoriaServicio.findFirst({
+          where: { nombre: nombre.trim(), id: { not: id } },
+        });
+        if (existe)
+          return res.status(409).json({ error: `Ya existe una categoría con el nombre "${nombre.trim()}"` });
+      }
     }
 
     if (color !== undefined && color !== null) {
@@ -120,25 +113,61 @@ const updateCategory = async (req, res) => {
         return res.status(400).json({ error: "El color debe ser un código hexadecimal válido (ej: #FF5733)" });
     }
 
+    // ========================
+    // VALIDACIÓN DE ESTADO
+    // ========================
+
     if (estado !== undefined) {
+      if (typeof estado === "boolean") {
+        return res.status(400).json({
+          error: "El campo 'estado' debe ser 'Activo' o 'Inactivo', no un boolean",
+        });
+      }
+
       const ESTADOS_VALIDOS = ["Activo", "Inactivo"];
       if (!ESTADOS_VALIDOS.includes(estado))
-        return res.status(400).json({ error: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(", ")}` });
+        return res.status(400).json({
+          error: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(", ")}`,
+        });
+
+      // 🔥 REGLA IMPORTANTE: no desactivar si tiene servicios activos
+      if (estado === "Inactivo") {
+        const serviciosActivos = await prisma.servicio.count({
+          where: {
+            categoriaId: id,
+            estado: "Activo",
+          },
+        });
+
+        if (serviciosActivos > 0) {
+          return res.status(400).json({
+            error: `No se puede desactivar la categoría porque tiene ${serviciosActivos} servicio(s) activo(s) asociado(s).`,
+          });
+        }
+      }
     }
 
+    // ========================
+    // ARMAR UPDATE
+    // ========================
+
     const updateData = {};
+
     if (nombre !== undefined) updateData.nombre = nombre.trim();
     if (descripcion !== undefined) updateData.descripcion = descripcion?.trim() ?? null;
     if (color !== undefined) updateData.color = color ?? null;
     if (estado !== undefined) updateData.estado = estado;
 
     const cat = await categoriesModel.update(id, updateData);
-    
+
     if (!cat) return res.status(404).json({ error: "Categoría no encontrada" });
+
     res.json(cat);
+
   } catch (err) {
     if (err.code === "P2025")
       return res.status(404).json({ error: "Categoría no encontrada" });
+
     console.error("Error PUT /categories/:id:", err);
     res.status(500).json({ error: "Error al actualizar la categoría" });
   }
@@ -197,4 +226,4 @@ const deleteCategory = async (req, res) => {
 module.exports = {
   getAllCategories, getCategoryById,
   createCategory, updateCategory, deleteCategory,
-};
+};3
