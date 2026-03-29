@@ -58,20 +58,21 @@ const create = async (req, res) => {
     if (tipo_documento && !TIPOS_DOC.includes(tipo_documento))
       return res.status(400).json({ error: `Tipo de documento inválido. Valores permitidos: ${TIPOS_DOC.join(", ")}` });
 
-    const data = await employeesModel.create({
-      nombre:          nombre.trim(),
-      apellido:        apellido.trim(),
-      tipoDocumento:   tipo_documento   ?? null,
-      numeroDocumento: numero_documento ?? null,
-      correo:          correo.trim().toLowerCase(),
-      telefono:        telefono         ?? null,
-      ciudad:          ciudad           ?? null,
-      especialidad:    especialidad     ?? null,
-      direccion:       direccion        ?? null,
-      fotoPerfil:      foto_perfil      ?? null,
-      contrasena,
-      idRol:           id_rol           ?? null,
-    });
+    const data = {};
+
+    if (nombre !== undefined)          data.nombre = nombre.trim();
+    if (apellido !== undefined)        data.apellido = apellido.trim();
+    if (tipo_documento !== undefined)  data.tipoDocumento = tipo_documento;
+    if (numero_documento !== undefined) data.numeroDocumento = numero_documento;
+    if (correo !== undefined)          data.correo = correo.trim().toLowerCase();
+    if (telefono !== undefined)        data.telefono = telefono;
+    if (ciudad !== undefined)          data.ciudad = ciudad;
+    if (especialidad !== undefined)    data.especialidad = especialidad;
+    if (direccion !== undefined)       data.direccion = direccion;
+    if (foto_perfil !== undefined)     data.fotoPerfil = foto_perfil;
+    if (Estado !== undefined)          data.estado = Estado;
+    
+    await employeesModel.update(id, data);
 
     res.status(201).json({ mensaje: "Empleado creado exitosamente", id: data.id });
   } catch (err) {
