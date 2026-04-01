@@ -1,5 +1,6 @@
 // src/controllers/news.controller.js
 const prisma = require("../config/prisma");
+const errors = require("../utils/errorMessages");
 
 function formatNovedad(n) {
   const empleado = n.horario?.empleado;
@@ -35,7 +36,7 @@ const create = async (req, res) => {
     const { employeeId, type, date, fechaFinal, startTime, endTime, description, action, reassignToEmployeeId } = req.body;
 
     if (!employeeId || !date || !description)
-      return res.status(400).json({ error: "empleado, fecha y descripción son requeridos" });
+      return res.status(400).json({ error: errors.NEWS_REQUIRED_FIELDS });
 
     const fechaInicio = new Date(date);
     const fechaFin    = fechaFinal ? new Date(fechaFinal) : fechaInicio;
@@ -68,8 +69,9 @@ const create = async (req, res) => {
       }));
 
       return res.status(409).json({
-        conflict:  true,
-        message:   `El empleado tiene ${servicios.length} servicio(s) asignado(s) en ese período`,
+        conflict: true,
+        message: errors.NEWS_CONFLICT_APPOINTMENTS,
+        total: servicios.length,
         servicios,
       });
     }
@@ -122,7 +124,9 @@ const create = async (req, res) => {
 
     res.status(201).json({ ok: true, id: novedad.id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: err.message || errors.INTERNAL_ERROR
+    });
   }
 };
 
@@ -144,7 +148,9 @@ const update = async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: err.message || errors.INTERNAL_ERROR
+    });
   }
 };
 
@@ -163,10 +169,27 @@ const updateStatus = async (req, res) => {
 
 const remove = async (req, res) => {
   try {
-    await prisma.novedad.delete({ where: { id: Number(req.params.id) } });
+    const id = Number(req.params.id);
+
+    const novedad = await prisma.novedad.findUnique({
+      where: { id }
+    });
+
+    if (!novedad) {
+      return res.status(404).json({
+        error: errors.NEWS_NOT_FOUND
+      });
+    }
+
+    await prisma.novedad.delete({
+      where: { id }
+    });
+    
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: err.message || errors.INTERNAL_ERROR
+    });
   }
 };
 

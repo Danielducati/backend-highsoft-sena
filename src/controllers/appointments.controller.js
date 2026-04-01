@@ -20,9 +20,9 @@ const create = async (req, res) => {
     const { cliente, fecha, hora, notas, servicios } = req.body;
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0)
       return res.status(400).json({ error: "fecha, hora y servicios son requeridos" });
-    const hoy = new Date(); hoy.setHours(0,0,0,0);
-    if (new Date(fecha) < hoy)
-      return res.status(400).json({ error: "No se pueden crear citas en fechas pasadas" });
+    const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+    if (fecha < hoyStr)
+  return res.status(400).json({ error: "No se pueden crear citas en fechas pasadas" });
     const id = await appointmentsModel.create({ cliente, fecha, hora, notas, servicios });
     res.status(201).json({ ok: true, PK_id_cita: id });
   } catch (err) { res.status(500).json({ error: err.message }); }
