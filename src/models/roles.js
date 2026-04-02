@@ -1,11 +1,11 @@
 // src/models/roles.js
 const prisma = require("../config/prisma");
 
-// ── Helpers ───────────────────────────────────────────────────
 function formatRol(rol) {
   return {
     id:       rol.id,
     nombre:   rol.nombre,
+    descripcion: rol.descripcion ?? "",
     estado:   rol.estado,
     isActive: rol.estado === "Activo",
     permisos: rol.rolesPermisos?.map(rp => ({
@@ -15,7 +15,6 @@ function formatRol(rol) {
   };
 }
 
-// ── Queries ───────────────────────────────────────────────────
 const getAll = async ({ soloActivos = false } = {}) => {
   const roles = await prisma.rol.findMany({
     where:   soloActivos ? { estado: "Activo" } : {},
@@ -33,11 +32,12 @@ const getById = async (id) => {
   return rol ? formatRol(rol) : null;
 };
 
-const create = async ({ nombre, permisosIds = [] }) => {
+const create = async ({ nombre, descripcion, permisosIds = [] }) => {
   const rol = await prisma.rol.create({
     data: {
       nombre,
-      estado:        "Activo",
+      descripcion: descripcion ?? "",
+      estado:      "Activo",
       rolesPermisos: {
         create: permisosIds.map(id => ({
           permiso: { connect: { id: Number(id) } },
@@ -49,16 +49,16 @@ const create = async ({ nombre, permisosIds = [] }) => {
   return formatRol(rol);
 };
 
-const update = async (id, { nombre, estado, permisosIds }) => {
+const update = async (id, { nombre, descripcion, estado, permisosIds }) => {
   if (permisosIds) {
     await prisma.rolPermiso.deleteMany({ where: { rolId: Number(id) } });
   }
-
   const rol = await prisma.rol.update({
     where: { id: Number(id) },
     data: {
       nombre,
-      estado: estado ?? "Activo",
+      descripcion: descripcion ?? "",
+      estado:      estado ?? "Activo",
       ...(permisosIds && {
         rolesPermisos: {
           create: permisosIds.map(pid => ({
@@ -73,10 +73,10 @@ const update = async (id, { nombre, estado, permisosIds }) => {
 };
 
 const deactivate = async (id) => {
-  return prisma.rol.update({
-    where: { id: Number(id) },
-    data:  { estado: "Inactivo" },
-  });
+  // Eliminar permisos asociados primero
+  await prisma.rolPermiso.deleteMany({ where: { rolId: Number(id) } });
+  // Eliminar el rol físicamente
+  return prisma.rol.delete({ where: { id: Number(id) } });
 };
 
 const countUsuarios = async (id) => {
