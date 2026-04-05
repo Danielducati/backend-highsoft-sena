@@ -1,5 +1,6 @@
 const express = require('express');
 const cors    = require('cors');
+require("dotenv").config();
 const app     = express();
 const PORT    = Number(process.env.PORT) || 3001;
 
@@ -21,6 +22,7 @@ const usersRoutes       = require('./routes/users.routes.js');
 const rolesRoutes       = require('./routes/roles.routes.js');
 const { router: authRouter } = require('./routes/auth.routes.js');
 const permissionsRoutes = require("./routes/permissions.routes.js");
+const uploadRoutes = require("./routes/upload.routes.js");
 // ── Registrar rutas ───────────────────────────────────────────
 app.use('/appointments',     appointmentRoutes);
 app.use('/permisos',         permissionsRoutes);      // ← agrega esta
@@ -50,6 +52,8 @@ app.use('/roles',            rolesRoutes);
 app.use('/api/roles',        rolesRoutes);
 app.use('/auth',             authRouter);
 app.use('/api/auth',         authRouter);
+app.use("/upload",          uploadRoutes);
+app.use("/api/upload",      uploadRoutes);
 
 app.listen(PORT, () => {
   console.log(`🔥 Backend corriendo en puerto ${PORT}`);
