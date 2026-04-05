@@ -1,21 +1,36 @@
-// src/controllers/appointments.controller.js
-
 const appointmentsModel = require("../models/appointments");
 const prisma = require("../config/prisma");
 const { appointmentErrors } = require("../utils/errorMessages");
 
 const getAll = async (req, res) => {
   try {
+
     const data = await appointmentsModel.getAll();
+
     res.json(data);
+
   } catch (err) {
-    res.status(500).json({ error: appointmentErrors.SERVER_ERROR });
+
+    res.status(500).json({
+      error: appointmentErrors.SERVER_ERROR
+    });
+
   }
 };
 
 const getOne = async (req, res) => {
+
   try {
-    const data = await appointmentsModel.getById(req.params.id);
+
+    const id = Number(req.params.id);
+
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        error: appointmentErrors.INVALID_ID
+      });
+    }
+
+    const data = await appointmentsModel.getById(id);
 
     if (!data) {
       return res.status(404).json({
@@ -26,11 +41,16 @@ const getOne = async (req, res) => {
     res.json(data);
 
   } catch (err) {
-    res.status(500).json({ error: appointmentErrors.SERVER_ERROR });
+
+    res.status(500).json({
+      error: appointmentErrors.SERVER_ERROR
+    });
+
   }
 };
 
 const create = async (req, res) => {
+
   try {
 
     const { cliente, fecha, hora, notas, servicios, empleadoId } = req.body;
@@ -38,6 +58,20 @@ const create = async (req, res) => {
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {
       return res.status(400).json({
         error: appointmentErrors.REQUIRED_FIELDS
+      });
+    }
+
+    if (isNaN(Date.parse(fecha))) {
+      return res.status(400).json({
+        error: appointmentErrors.INVALID_DATE_FORMAT
+      });
+    }
+
+    const horaRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+    if (!horaRegex.test(hora)) {
+      return res.status(400).json({
+        error: appointmentErrors.INVALID_TIME_FORMAT
       });
     }
 
@@ -51,8 +85,17 @@ const create = async (req, res) => {
       });
     }
 
-    // 🔴 VALIDACIÓN IMPORTANTE: evitar doble cita en la misma hora
     if (empleadoId) {
+
+      const empleado = await prisma.empleado.findUnique({
+        where: { id: Number(empleadoId) }
+      });
+
+      if (!empleado) {
+        return res.status(404).json({
+          error: appointmentErrors.EMPLOYEE_NOT_FOUND
+        });
+      }
 
       const existingAppointment = await prisma.agendamientoCita.findFirst({
         where: {
@@ -110,7 +153,9 @@ const update = async (req, res) => {
 
     await appointmentsModel.update(id, req.body);
 
-    res.json({ ok: true });
+    res.json({
+      ok: true
+    });
 
   } catch (err) {
 
@@ -142,7 +187,9 @@ const updateStatus = async (req, res) => {
 
     await appointmentsModel.updateStatus(id, status);
 
-    res.json({ ok: true });
+    res.json({
+      ok: true
+    });
 
   } catch (err) {
 
@@ -165,9 +212,11 @@ const cancel = async (req, res) => {
       });
     }
 
-    await appointmentsModel.updateStatus(id, "cancelled");
+    await appointmentsModel.updateStatus(id, "Cancelada");
 
-    res.json({ ok: true });
+    res.json({
+      ok: true
+    });
 
   } catch (err) {
 
@@ -224,7 +273,9 @@ const remove = async (req, res) => {
 
     await appointmentsModel.remove(id);
 
-    res.json({ ok: true });
+    res.json({
+      ok: true
+    });
 
   } catch (err) {
 

@@ -1,60 +1,98 @@
 // src/seed.js
-// Crea el primer usuario administrador directamente en la BD
+// Crea usuarios de prueba: admin, empleado y cliente
 // Uso: node src/seed.js
-// Solo necesitas correrlo UNA VEZ en cada instalación nueva
+// Es seguro correrlo varias veces — no duplica datos
 
 const prisma = require("./config/prisma");
 const bcrypt = require("bcryptjs");
 
+async function createUsuario(correo, contrasena, rolId) {
+  const existe = await prisma.usuario.findUnique({ where: { correo } });
+  if (existe) return { usuario: existe, creado: false };
+  const hashed = await bcrypt.hash(contrasena, 10);
+  const usuario = await prisma.usuario.create({
+    data: { correo, contrasena: hashed, estado: "Activo", rolId },
+  });
+  return { usuario, creado: true };
+}
+
 async function seed() {
-console.log("🌱 Iniciando seed...");
+  console.log("Iniciando seed...\n");
 
-// 1. Crear rol Admin si no existe
-let rolAdmin = await prisma.rol.findFirst({ where: { nombre: "Admin" } });
-if (!rolAdmin) {
-    rolAdmin = await prisma.rol.create({ data: { nombre: "Admin" } });
-    console.log("✅ Rol Admin creado");
-} else {
-    console.log("ℹ️  Rol Admin ya existe (id:", rolAdmin.id, ")");
-}
+  // 1. Verificar roles necesarios
+  const rolAdmin    = await prisma.rol.findFirst({ where: { nombre: "Admin" } });
+  const rolEmpleado = await prisma.rol.findFirst({ where: { nombre: "Empleado" } });
+  const rolCliente  = await prisma.rol.findFirst({ where: { nombre: "Cliente" } });
 
-// 2. Verificar si ya existe el admin
-const existe = await prisma.usuario.findUnique({
-    where: { correo: "admin@highlife.com" }
-});
-
-if (existe) {
-    console.log("ℹ️  El usuario admin ya existe, no se creó de nuevo");
-    console.log("   Correo:     admin@highlife.com");
-    console.log("   Contraseña: admin123");
+  if (!rolAdmin || !rolEmpleado || !rolCliente) {
+    console.error("Faltan roles en la BD. Corre primero el seed completo de permisos.");
     await prisma.$disconnect();
-    return;
-}
+    process.exit(1);
+  }
 
-// 3. Crear usuario admin
-const hashed = await bcrypt.hash("admin123", 10);
+  // 2. Admin
+  const { creado: adminCreado } = await createUsuario(
+    "admin@highlife.com", "admin123", rolAdmin.id
+  );
+  console.log(adminCreado ? "Usuario admin creado" : "Usuario admin ya existe");
 
-await prisma.usuario.create({
-    data: {
-    correo:     "admin@highlife.com",
-    contrasena: hashed,
-    estado:     "Activo",
-    rolId:      rolAdmin.id,
-    },
-});
+  // 3. Empleado
+  const { usuario: usuarioEmp, creado: empCreado } = await createUsuario(
+    "empleado@highlife.com", "empleado123", rolEmpleado.id
+  );
+  if (empCreado) {
+    const empExiste = await prisma.empleado.findFirst({ where: { correo: "empleado@highlife.com" } });
+    if (!empExiste) {
+      await prisma.empleado.create({
+        data: {
+          nombre: "Empleado", apellido: "Demo",
+          correo: "empleado@highlife.com",
+          especialidad: "Estilista",
+          estado: "Activo",
+          usuarioId: usuarioEmp.id,
+        },
+      });
+    }
+    console.log("Usuario empleado creado");
+  } else {
+    console.log("Usuario empleado ya existe");
+  }
 
-console.log("✅ Usuario admin creado exitosamente");
-console.log("─────────────────────────────────");
-console.log("   Correo:     admin@highlife.com");
-console.log("   Contraseña: admin123");
-console.log("─────────────────────────────────");
-console.log("⚠️  Cambia la contraseña después del primer login");
+  // 4. Cliente
+  const { usuario: usuarioCli, creado: cliCreado } = await createUsuario(
+    "cliente@highlife.com", "cliente123", rolCliente.id
+  );
+  if (cliCreado) {
+    const cliExiste = await prisma.cliente.findFirst({ where: { correo: "cliente@highlife.com" } });
+    if (!cliExiste) {
+      await prisma.cliente.create({
+        data: {
+          nombre: "Cliente", apellido: "Demo",
+          correo: "cliente@highlife.com",
+          fotoPerfil: "",
+          estado: "Activo",
+          usuarioId: usuarioCli.id,
+        },
+      });
+    }
+    console.log("Usuario cliente creado");
+  } else {
+    console.log("Usuario cliente ya existe");
+  }
 
-await prisma.$disconnect();
+  // Resumen
+  console.log("\n─────────────────────────────────────────────────");
+  console.log("  Admin     admin@highlife.com    / admin123");
+  console.log("  Empleado  empleado@highlife.com / empleado123");
+  console.log("  Cliente   cliente@highlife.com  / cliente123");
+  console.log("─────────────────────────────────────────────────");
+  console.log("Cambia las contrasenas despues del primer login\n");
+
+  await prisma.$disconnect();
 }
 
 seed().catch(err => {
-console.error("❌ Error en seed:", err.message);
-prisma.$disconnect();
-process.exit(1);
+  console.error("Error en seed:", err.message);
+  prisma.$disconnect();
+  process.exit(1);
 });

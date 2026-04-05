@@ -1,5 +1,6 @@
 // src/controllers/news.controller.js
 const prisma = require("../config/prisma");
+const { newsErrors, generalErrors } = require("../utils/errorMessages");
 
 function formatNovedad(n) {
   const empleado = n.horario?.empleado;
@@ -26,7 +27,7 @@ const getAll = async (req, res) => {
     });
     res.json(data.map(formatNovedad));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: generalErrors.INTERNAL_ERROR });
   }
 };
 
@@ -35,7 +36,7 @@ const create = async (req, res) => {
     const { employeeId, type, date, fechaFinal, startTime, endTime, description, action, reassignToEmployeeId } = req.body;
 
     if (!employeeId || !date || !description)
-      return res.status(400).json({ error: "empleado, fecha y descripción son requeridos" });
+      return res.status(400).json({ error: newsErrors.NEWS_REQUIRED_FIELDS });
 
     const fechaInicio = new Date(date);
     const fechaFin    = fechaFinal ? new Date(fechaFinal) : fechaInicio;
@@ -75,7 +76,7 @@ const create = async (req, res) => {
       // 409 Conflict — hay servicios asignados al empleado, el frontend decide
       return res.status(409).json({
         conflict:  true,
-        message:   `El empleado tiene ${servicios.length} servicio(s) asignado(s) en ese período`,
+        message: newsErrors.NEWS_CONFLICT_APPOINTMENTS,
         servicios,
       });
     }
@@ -132,7 +133,7 @@ const create = async (req, res) => {
 
     res.status(201).json({ ok: true, id: novedad.id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: generalErrors.INTERNAL_ERROR });
   }
 };
 
@@ -154,9 +155,11 @@ const update = async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: generalErrors.INTERNAL_ERROR });
   }
 };
+
+
 
 const updateStatus = async (req, res) => {
   try {
@@ -167,7 +170,7 @@ const updateStatus = async (req, res) => {
     });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: newsErrors.NEWS_INVALID_STATUS });
   }
 };
 
@@ -176,7 +179,7 @@ const remove = async (req, res) => {
     await prisma.novedad.delete({ where: { id: Number(req.params.id) } });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: newsErrors.NEWS_NOT_FOUND });
   }
 };
 
