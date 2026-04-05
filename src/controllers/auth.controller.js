@@ -23,7 +23,7 @@ const login = async (req, res) => {
     if (!valida)
       return res.status(401).json({ error: "Credenciales incorrectas" });
 
-    const empleado = await prisma.empleado.findFirst({
+    const cliente = await prisma.cliente.findFirst({
       where: { usuarioId: usuario.id },
     });
 
@@ -40,11 +40,12 @@ const login = async (req, res) => {
         correo: usuario.correo,
         rol:    usuario.rol.nombre,
         rolId:  usuario.rolId,
-        nombre: empleado ? `${empleado.nombre} ${empleado.apellido}` : usuario.correo,
-        foto:   empleado?.fotoPerfil ?? null,
+        nombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : usuario.correo,
+        foto:   cliente?.fotoPerfil ?? null,
       },
     });
   } catch (err) {
+    console.error("Error en login:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -52,52 +53,87 @@ const login = async (req, res) => {
 // ── POST /auth/register ───────────────────────────────────────────────────────
 // Registro público de clientes desde la app
 const register = async (req, res) => {
-  const { correo, contrasena, nombre, apellido, telefono, tipo_documento, numero_documento } = req.body;
+  // Mapear los nombres de campos que vienen del frontend
+  const { 
+    email,           // del frontend: email
+    password,        // del frontend: password
+    fullName,        // del frontend: fullName
+    apellido,        // del frontend: apellido
+    phone,           // del frontend: phone
+    tipocedula,      // del frontend: tipocedula
+    cedula,          // del frontend: cedula (numero de documento)
+  } = req.body;
 
-  if (!correo || !contrasena || !nombre || !apellido)
-    return res.status(400).json({ error: "Nombre, apellido, correo y contraseña son requeridos" });
+  // Validar campos requeridos
+  if (!email || !password || !fullName || !apellido) {
+    return res.status(400).json({ 
+      error: "Nombre, apellido, correo y contraseña son requeridos" 
+    });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ 
+      error: "La contraseña debe tener mínimo 6 caracteres" 
+    });
+  }
 
   try {
     // Verificar si el correo ya existe
-    const existe = await prisma.usuario.findUnique({ where: { correo } });
-    if (existe)
+    const existe = await prisma.usuario.findUnique({ where: { correo: email } });
+    if (existe) {
       return res.status(409).json({ error: "El correo ya está registrado" });
+    }
 
-    const hashed = await bcrypt.hash(contrasena, 10);
+    // Hashear la contraseña
+    const hashed = await bcrypt.hash(password, 10);
 
+    // Usar transacción para crear usuario y cliente juntos
     await prisma.$transaction(async (tx) => {
       // Buscar rol Cliente
       const rolCliente = await tx.rol.findFirst({ where: { nombre: "Cliente" } });
-      if (!rolCliente) throw new Error("Rol Cliente no encontrado en la BD");
+      if (!rolCliente) {
+        throw new Error("Rol Cliente no encontrado en la BD");
+      }
 
+      // Crear usuario
       const usuario = await tx.usuario.create({
         data: {
-          correo,
+          correo: email,
           contrasena: hashed,
-          estado:     "Activo",
-          rolId:      rolCliente.id,
+          estado: "Activo",
+          rolId: rolCliente.id,
         },
       });
 
+      // Crear cliente asociado
       await tx.cliente.create({
         data: {
-          nombre,
-          apellido,
-          correo,
-          telefono:        telefono        ?? null,
-          tipoDocumento:   tipo_documento  ?? null,
-          numeroDocumento: numero_documento ?? null,
-          fotoPerfil:      "",
-          estado:          "Activo",
-          usuarioId:       usuario.id,
+          nombre: fullName,
+          apellido: apellido,
+          correo: email,
+          telefono: phone ?? null,
+          tipoDocumento: tipocedula ?? null,
+          numeroDocumento: cedula ?? null,
+          fotoPerfil: null,  // Foto de perfil inicial (sin foto)
+          estado: "Activo",
+          usuarioId: usuario.id,
         },
       });
     });
 
-    res.status(201).json({ ok: true, mensaje: "Usuario registrado exitosamente" });
+    res.status(201).json({ 
+      ok: true, 
+      mensaje: "Usuario registrado exitosamente" 
+    });
   } catch (err) {
-    if (err.message.includes("Rol Cliente"))
-      return res.status(500).json({ error: "Configura el rol 'Cliente' en la BD primero" });
+    console.error("Error en register:", err);
+    
+    if (err.message.includes("Rol Cliente")) {
+      return res.status(500).json({ 
+        error: "Configura el rol 'Cliente' en la BD primero" 
+      });
+    }
+    
     res.status(500).json({ error: err.message });
   }
 };
@@ -105,13 +141,16 @@ const register = async (req, res) => {
 // ── GET /auth/me ──────────────────────────────────────────────────────────────
 const me = async (req, res) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer "))
+  if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Token requerido" });
+  }
 
   try {
-    const decoded = jwt.verify(authHeader.split(" ")[1], JWT_SECRET);
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
     res.json({ usuario: decoded });
-  } catch {
+  } catch (err) {
+    console.error("Error en me:", err);
     res.status(401).json({ error: "Token inválido o expirado" });
   }
 };

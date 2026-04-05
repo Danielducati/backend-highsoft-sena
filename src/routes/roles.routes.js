@@ -2,7 +2,7 @@
 const express = require("express");
 const router  = express.Router();
 const {
-  getAllRoles, getRolById, createRol, updateRol, deactivateRol,
+  getAllRoles, getRolById, createRol, updateRol, deleteRol,
   getAllPermisos, getPermisosByRol,
 } = require("../controllers/roles.controller");
 const { verificarToken, soloAdmin }                          = require("../middlewares/auth.middleware");
@@ -17,6 +17,6 @@ router.get("/:id",          verificarToken, validateRoleId,                     
 router.post("/",            verificarToken, soloAdmin, validateCreateRole,      createRol);
 router.put("/:id",          verificarToken, soloAdmin, validateRoleId,
                                             validateUpdateRole,                 updateRol);
-router.delete("/:id",       verificarToken, soloAdmin, validateRoleId,          deactivateRol);
+router.delete("/:id",       verificarToken, soloAdmin, validateRoleId,          deleteRol);
 
 module.exports = router;
