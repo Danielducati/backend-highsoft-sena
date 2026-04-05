@@ -50,33 +50,64 @@ const create = async ({ nombre, descripcion, permisosIds = [] }) => {
 };
 
 const update = async (id, { nombre, descripcion, estado, permisosIds }) => {
-  if (permisosIds) {
+  // Construcción dinámica del objeto de actualización
+  const updateData = {};
+  
+  if (nombre !== undefined) updateData.nombre = nombre;
+  if (descripcion !== undefined) updateData.descripcion = descripcion ?? "";
+  if (estado !== undefined) updateData.estado = estado;
+  
+  // Manejar permisos si se proporcionan
+  if (permisosIds !== undefined) {
     await prisma.rolPermiso.deleteMany({ where: { rolId: Number(id) } });
+    
+    if (permisosIds.length > 0) {
+      updateData.rolesPermisos = {
+        create: permisosIds.map(pid => ({
+          permiso: { connect: { id: Number(pid) } },
+        })),
+      };
+    }
   }
+  
   const rol = await prisma.rol.update({
     where: { id: Number(id) },
-    data: {
-      nombre,
-      descripcion: descripcion ?? "",
-      estado:      estado ?? "Activo",
-      ...(permisosIds && {
-        rolesPermisos: {
-          create: permisosIds.map(pid => ({
-            permiso: { connect: { id: Number(pid) } },
-          })),
-        },
-      }),
-    },
+    data: updateData,
     include: { rolesPermisos: { include: { permiso: true } } },
   });
   return formatRol(rol);
 };
 
 const deactivate = async (id) => {
-  // Eliminar permisos asociados primero
-  await prisma.rolPermiso.deleteMany({ where: { rolId: Number(id) } });
-  // Eliminar el rol físicamente
-  return prisma.rol.delete({ where: { id: Number(id) } });
+  return prisma.rol.update({
+    where: { id: Number(id) },
+    data: {
+      estado: "Inactivo",
+    },
+  });
+};
+
+const toggleStatus = async (id, isActive) => {
+  return prisma.rol.update({
+    where: { id: Number(id) },
+    data: {
+      estado: isActive ? "Activo" : "Inactivo",
+    },
+  });
+};
+
+// ✅ Eliminar todos los permisos de un rol
+const deletePermissionsByRole = async (id) => {
+  return prisma.rolPermiso.deleteMany({
+    where: { rolId: Number(id) },
+  });
+};
+
+// ✅ Eliminar el rol completamente de la BD
+const deleteRole = async (id) => {
+  return prisma.rol.delete({
+    where: { id: Number(id) },
+  });
 };
 
 const countUsuarios = async (id) => {
@@ -96,6 +127,7 @@ const getPermisosByRol = async (id) => {
 };
 
 module.exports = {
-  getAll, getById, create, update, deactivate,
+  getAll, getById, create, update, deactivate, toggleStatus,
+  deletePermissionsByRole, deleteRole,
   countUsuarios, getAllPermisos, getPermisosByRol,
 };
