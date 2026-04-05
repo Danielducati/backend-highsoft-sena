@@ -10,8 +10,10 @@ datasource db {
 model Rol {
   id            Int          @id(map: "PK__Roles__D2CA7D1BB9AAD356") @default(autoincrement()) @map("PK_id_rol")
   nombre        String       @map("Nombre") @db.VarChar(100)
+  descripcion String?
   estado        String       @default("Activo", map: "DF__Roles__Estado__37A5467C") @map("Estado") @db.VarChar(30)
   rolesPermisos RolPermiso[]
+  
   usuarios      Usuario[]
 
   @@map("Roles")
