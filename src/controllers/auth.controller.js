@@ -23,8 +23,9 @@ const login = async (req, res) => {
     if (!valida)
       return res.status(401).json({ error: "Credenciales incorrectas" });
 
+    // Buscar cliente asociado al usuario
     const cliente = await prisma.cliente.findFirst({
-      where: { usuarioId: usuario.id },
+      where: { fk_id_usuario: usuario.id },
     });
 
     const token = jwt.sign(
@@ -41,7 +42,7 @@ const login = async (req, res) => {
         rol:    usuario.rol.nombre,
         rolId:  usuario.rolId,
         nombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : usuario.correo,
-        foto:   cliente?.fotoPerfil ?? null,
+        foto:   cliente?.foto_perfil ?? null,
       },
     });
   } catch (err) {
@@ -88,7 +89,7 @@ const register = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
 
     // Usar transacción para crear usuario y cliente juntos
-    await prisma.$transaction(async (tx) => {
+    const resultado = await prisma.$transaction(async (tx) => {
       // Buscar rol Cliente
       const rolCliente = await tx.rol.findFirst({ where: { nombre: "Cliente" } });
       if (!rolCliente) {
@@ -106,24 +107,35 @@ const register = async (req, res) => {
       });
 
       // Crear cliente asociado
-      await tx.cliente.create({
+      // ⭐ Usar la relación Usuarios correctamente (connect en lugar de fk_id_usuario)
+      const cliente = await tx.cliente.create({
         data: {
           nombre: fullName,
           apellido: apellido,
           correo: email,
           telefono: phone ?? null,
-          tipoDocumento: tipocedula ?? null,
-          numeroDocumento: cedula ?? null,
-          fotoPerfil: null,  // Foto de perfil inicial (sin foto)
-          estado: "Activo",
-          usuarioId: usuario.id,
+          tipo_documento: tipocedula ?? null,
+          numero_documento: cedula ?? null,
+          direccion: null,
+          foto_perfil: "",
+          Estado: "Activo",
+          Usuarios: {
+            connect: { id: usuario.id },  // ← Conectar al usuario creado
+          },
         },
       });
+
+      return { usuario, cliente };
     });
 
     res.status(201).json({ 
       ok: true, 
-      mensaje: "Usuario registrado exitosamente" 
+      mensaje: "Usuario registrado exitosamente",
+      usuario: {
+        id: resultado.usuario.id,
+        correo: resultado.usuario.correo,
+        nombre: `${resultado.cliente.nombre} ${resultado.cliente.apellido}`,
+      }
     });
   } catch (err) {
     console.error("Error en register:", err);

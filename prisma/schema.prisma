@@ -46,7 +46,7 @@ model Usuario {
   Cliente              Cliente[]
   empleado             Empleado[]
   rol                  Rol                   @relation(fields: [rolId], references: [id], onUpdate: NoAction, map: "FK_Usuarios_Rol")
-
+  foto_perfil: ""
   @@map("Usuarios")
 }
 
