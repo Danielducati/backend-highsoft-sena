@@ -200,7 +200,7 @@ const remove = async (req, res) => {
       });
     }
 
-    // 🔥 SOFT DELETE (MEJOR PRÁCTICA)
+    // SOFT DELETE (MEJOR PRÁCTICA)
     await prisma.empleado.update({
       where: { id },
       data: { estado: "Inactivo" }
