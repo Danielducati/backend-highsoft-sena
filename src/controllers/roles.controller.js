@@ -37,6 +37,14 @@ const createRol = async (req, res) => {
 const updateRol = async (req, res) => {
   try {
     const { nombre, descripcion, permisosIds, estado } = req.body;
+    
+    // Si solo viene "estado", es un cambio de estado (toggle)
+    if (estado && !nombre && !descripcion && !permisosIds) {
+      const rol = await rolesModel.update(req.params.id, { estado });
+      return res.json(rol);
+    }
+    
+    // Si vienen otros datos, es una actualización completa
     const rol = await rolesModel.update(req.params.id, { nombre, descripcion, permisosIds, estado });
     res.json(rol);
   } catch (err) {
@@ -47,14 +55,20 @@ const updateRol = async (req, res) => {
   }
 };
 
-const deactivateRol = async (req, res) => {
+const deleteRol = async (req, res) => {
   try {
     const count = await rolesModel.countUsuarios(req.params.id);
     if (count > 0)
       return res.status(400).json({
         error: `No se puede eliminar — ${count} usuario(s) tienen este rol asignado`,
       });
-    await rolesModel.deactivate(req.params.id);
+    
+    // Eliminar primero los permisos asociados
+    await rolesModel.deletePermissionsByRole(req.params.id);
+    
+    // Luego eliminar el rol completamente
+    await rolesModel.deleteRole(req.params.id);
+    
     res.json({ ok: true, mensaje: "Rol eliminado correctamente" });
   } catch (err) {
     if (err.code === "P2025")
@@ -84,6 +98,6 @@ const getPermisosByRol = async (req, res) => {
 
 module.exports = {
   getAllRoles, getRolById, createRol,
-  updateRol, deactivateRol,
+  updateRol, deleteRol,
   getAllPermisos, getPermisosByRol,
 };
