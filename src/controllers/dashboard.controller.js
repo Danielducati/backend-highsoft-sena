@@ -1,3 +1,5 @@
+//backend-highsoft-sena\src\controllers\dashboard.controller.js
+
 const prisma = require("../config/prisma");
 const ERROR = require("../utils/errorMessages");
 
@@ -28,31 +30,6 @@ function calcChange(current, previous) {
   return Number(pct) >= 0 ? `+${pct}%` : `${pct}%`;
 }
 
-let ventaTableMissingLogged = false;
-
-async function ventaFindManyOrEmpty(args) {
-  try {
-    return await prisma.venta.findMany(args);
-  } catch (err) {
-    const missing =
-      err.code === "P2021" &&
-      (err.meta?.modelName === "Venta" ||
-        String(err.meta?.table ?? "").toLowerCase().includes("venta"));
-
-    if (missing) {
-      if (!ventaTableMissingLogged) {
-        ventaTableMissingLogged = true;
-
-        console.warn(ERROR.DASHBOARD.SALES_TABLE_MISSING);
-      }
-
-      return [];
-    }
-
-    throw err;
-  }
-}
-
 const getStats = async (req, res) => {
   try {
 
@@ -70,12 +47,13 @@ const getStats = async (req, res) => {
     const [
       clientesActivos,
       citasActuales,
-      serviciosCompletados,
       citasAnteriores,
-      serviciosAnteriores,
       ventasActuales,
       ventasAnteriores,
+      ventasPeriodoActual,
+      ventasPeriodoAnterior
     ] = await Promise.all([
+
       prisma.cliente.count({
         where: { Estado: "Activo" }
       }),
@@ -85,50 +63,49 @@ const getStats = async (req, res) => {
       }),
 
       prisma.agendamientoCita.count({
+        where: { fecha: { gte: anterior, lt: desde } }
+      }),
+
+      prisma.venta.count({
         where: {
-          estado: "Completada",
-          fecha: { gte: desde }
+          Fecha: { gte: desde },
+          Estado: "Activo"
         }
       }),
 
-      prisma.agendamientoCita.count({
+      prisma.venta.count({
         where: {
-          fecha: { gte: anterior, lt: desde }
+          Fecha: { gte: anterior, lt: desde },
+          Estado: "Activo"
         }
       }),
 
-      prisma.agendamientoCita.count({
-        where: {
-          estado: "Completada",
-          fecha: { gte: anterior, lt: desde }
-        }
-      }),
-
-      ventaFindManyOrEmpty({
+      prisma.venta.findMany({
         where: { Fecha: { gte: desde } },
         select: { Total: true }
       }),
 
-      ventaFindManyOrEmpty({
+      prisma.venta.findMany({
         where: { Fecha: { gte: anterior, lt: desde } },
         select: { Total: true }
-      }),
+      })
+
     ]);
 
-    const ventasTotales = ventasActuales.reduce(
+    const ventasTotales = ventasPeriodoActual.reduce(
       (s, v) => s + Number(v.Total ?? 0),
       0
     );
 
-    const ventasAntTotal = ventasAnteriores.reduce(
+    const ventasAntTotal = ventasPeriodoAnterior.reduce(
       (s, v) => s + Number(v.Total ?? 0),
       0
     );
 
-    const ventasPorMes = await ventaFindManyOrEmpty({
+    const ventasPorMes = await prisma.venta.findMany({
       where: { Fecha: { gte: desde } },
       select: { Fecha: true, Total: true },
-      orderBy: { Fecha: "asc" },
+      orderBy: { Fecha: "asc" }
     });
 
     const salesMap = new Map();
@@ -164,7 +141,7 @@ const getStats = async (req, res) => {
       },
       include: {
         servicio: true
-      },
+      }
     });
 
     const servMap = new Map();
@@ -195,18 +172,15 @@ const getStats = async (req, res) => {
         citasDelPeriodo: citasActuales,
         citasChange: calcChange(citasActuales, citasAnteriores),
 
-        serviciosCompletados,
-        serviciosChange: calcChange(
-          serviciosCompletados,
-          serviciosAnteriores
-        ),
+        ventasCompletadas: ventasActuales,
+        ventasCountChange: calcChange(ventasActuales, ventasAnteriores)
       },
 
       salesData: [...salesMap.values()],
 
       servicesData: [...servMap.values()]
         .sort((a, b) => b.value - a.value)
-        .slice(0, 5),
+        .slice(0, 5)
     });
 
   } catch (err) {
@@ -219,4 +193,4 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = {getStats};
+module.exports = { getStats };
