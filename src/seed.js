@@ -69,7 +69,7 @@ async function seed() {
         data: {
           nombre: "Cliente", apellido: "Demo",
           correo: "cliente@highlife.com",
-          fotoPerfil: "",
+          foto_perfil: "",
           estado: "Activo",
           usuarioId: usuarioCli.id,
         },
