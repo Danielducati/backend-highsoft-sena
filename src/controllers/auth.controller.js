@@ -1,19 +1,21 @@
 const bcrypt = require("bcryptjs");
-const jwt    = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 const prisma = require("../config/prisma");
+const { sendWelcomeEmail, sendResetPasswordEmail } = require("../config/email");
 
 const JWT_SECRET = process.env.JWT_SECRET || "highlife_secret_2024";
 
-// ── POST /auth/login ──────────────────────────────────────────────────────────
+// ── LOGIN ──────────────────────────────────────────
 const login = async (req, res) => {
   const { correo, contrasena } = req.body;
+
   if (!correo || !contrasena)
     return res.status(400).json({ error: "Correo y contraseña son requeridos" });
 
   try {
     const usuario = await prisma.usuario.findUnique({
-      where:   { correo },
-      include: { rol: true },
+      where: { correo },
+      include: { rol: true }, // 🔥 IMPORTANTE
     });
 
     if (!usuario || usuario.estado !== "Activo")
@@ -23,148 +25,246 @@ const login = async (req, res) => {
     if (!valida)
       return res.status(401).json({ error: "Credenciales incorrectas" });
 
-    // Buscar cliente asociado al usuario
-    const cliente = await prisma.cliente.findFirst({
-      where: { fk_id_usuario: usuario.id },
-    });
-
     const token = jwt.sign(
-      { id: usuario.id, correo: usuario.correo, rol: usuario.rol.nombre, rolId: usuario.rolId },
+      { id: usuario.id, correo: usuario.correo, rol: usuario.rol.nombre },
       JWT_SECRET,
       { expiresIn: "8h" }
     );
 
-    res.json({
+    // 🔥 AQUÍ ESTÁ LA SOLUCIÓN REAL
+    return res.json({
       token,
       usuario: {
-        id:     usuario.id,
+        id: usuario.id,
         correo: usuario.correo,
-        rol:    usuario.rol.nombre,
-        rolId:  usuario.rolId,
-        nombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : usuario.correo,
-        foto:   cliente?.foto_perfil ?? null,
+        rol: usuario.rol.nombre, // 👈 CLAVE PARA EL FRONT
       },
     });
+
   } catch (err) {
-    console.error("Error en login:", err);
+    console.error("❌ ERROR LOGIN:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// ── POST /auth/register ───────────────────────────────────────────────────────
-// Registro público de clientes desde la app
+// ── REGISTER ───────────────────────────────────────
 const register = async (req, res) => {
-  // Mapear los nombres de campos que vienen del frontend
-  const { 
-    email,           // del frontend: email
-    password,        // del frontend: password
-    fullName,        // del frontend: fullName
-    apellido,        // del frontend: apellido
-    phone,           // del frontend: phone
-    tipocedula,      // del frontend: tipocedula
-    cedula,          // del frontend: cedula (numero de documento)
-  } = req.body;
+  const { email, password, fullName, apellido } = req.body;
 
-  // Validar campos requeridos
   if (!email || !password || !fullName || !apellido) {
-    return res.status(400).json({ 
-      error: "Nombre, apellido, correo y contraseña son requeridos" 
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ 
-      error: "La contraseña debe tener mínimo 6 caracteres" 
+    return res.status(400).json({
+      error: "Datos incompletos",
     });
   }
 
   try {
-    // Verificar si el correo ya existe
     const existe = await prisma.usuario.findUnique({ where: { correo: email } });
     if (existe) {
-      return res.status(409).json({ error: "El correo ya está registrado" });
+      return res.status(409).json({ error: "El correo ya existe" });
     }
 
-    // Hashear la contraseña
     const hashed = await bcrypt.hash(password, 10);
 
-    // Usar transacción para crear usuario y cliente juntos
-    const resultado = await prisma.$transaction(async (tx) => {
-      // Buscar rol Cliente
-      const rolCliente = await tx.rol.findFirst({ where: { nombre: "Cliente" } });
-      if (!rolCliente) {
-        throw new Error("Rol Cliente no encontrado en la BD");
-      }
-
-      // Crear usuario
-      const usuario = await tx.usuario.create({
-        data: {
-          correo: email,
-          contrasena: hashed,
-          estado: "Activo",
-          rolId: rolCliente.id,
-        },
-      });
-
-      // Crear cliente asociado
-      // ⭐ Usar la relación Usuarios correctamente (connect en lugar de fk_id_usuario)
-      const cliente = await tx.cliente.create({
-        data: {
-          nombre: fullName,
-          apellido: apellido,
-          correo: email,
-          telefono: phone ?? null,
-          tipo_documento: tipocedula ?? null,
-          numero_documento: cedula ?? null,
-          direccion: null,
-          foto_perfil: "",
-          Estado: "Activo",
-          Usuarios: {
-            connect: { id: usuario.id },  // ← Conectar al usuario creado
-          },
-        },
-      });
-
-      return { usuario, cliente };
+    const rolCliente = await prisma.rol.findFirst({
+      where: { nombre: "Cliente" },
     });
 
-    res.status(201).json({ 
-      ok: true, 
-      mensaje: "Usuario registrado exitosamente",
-      usuario: {
-        id: resultado.usuario.id,
-        correo: resultado.usuario.correo,
-        nombre: `${resultado.cliente.nombre} ${resultado.cliente.apellido}`,
-      }
+    const usuario = await prisma.usuario.create({
+      data: {
+        correo: email,
+        contrasena: hashed,
+        estado: "Activo",
+        rolId: rolCliente.id,
+      },
     });
-  } catch (err) {
-    console.error("Error en register:", err);
-    
-    if (err.message.includes("Rol Cliente")) {
-      return res.status(500).json({ 
-        error: "Configura el rol 'Cliente' en la BD primero" 
-      });
+
+    try {
+      await sendWelcomeEmail(email, fullName);
+      console.log("✅ Email de bienvenida enviado a:", email);
+    } catch (emailErr) {
+      console.warn("⚠️ Email de bienvenida no se envió:", emailErr);
     }
-    
+
+    res.json({ message: "Usuario creado" });
+
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// ── GET /auth/me ──────────────────────────────────────────────────────────────
-const me = async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Token requerido" });
-  }
-
+// ── FORGOT PASSWORD ───────────────────────────────
+const forgotPassword = async (req, res) => {
   try {
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    res.json({ usuario: decoded });
-  } catch (err) {
-    console.error("Error en me:", err);
-    res.status(401).json({ error: "Token inválido o expirado" });
+    const { correo } = req.body;
+
+    if (!correo) {
+      return res.status(400).json({ error: "Correo requerido" });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { correo },
+    });
+
+    if (!usuario) {
+      return res.json({ 
+        message: "Si el correo existe, recibirás un enlace de recuperación" 
+      });
+    }
+
+    await prisma.resetPasswordToken.deleteMany({
+      where: { usuarioId: usuario.id },
+    });
+
+    const resetToken = jwt.sign(
+      { id: usuario.id, type: "reset" },
+      JWT_SECRET,
+      { expiresIn: "30m" }
+    );
+
+    await prisma.resetPasswordToken.create({
+      data: {
+        usuarioId: usuario.id,
+        token: resetToken,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+    try {
+      await sendResetPasswordEmail(correo, resetLink);
+      console.log("✅ Email de recuperación enviado a:", correo);
+    } catch (emailErr) {
+      console.error("❌ Error al enviar email:", emailErr);
+      return res.status(500).json({ error: "Error al enviar email" });
+    }
+
+    res.json({ 
+      message: "Correo de recuperación enviado",
+      ...(process.env.NODE_ENV === "development" && { resetToken })
+    });
+
+  } catch (error) {
+    console.error("❌ Error en forgotPassword:", error);
+    res.status(500).json({ error: "Error en recuperación" });
   }
 };
 
-module.exports = { login, register, me };
+// ── VALIDATE RESET TOKEN ──────────────────────────
+const validateResetToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: "Token requerido" });
+    }
+
+    const resetRecord = await prisma.resetPasswordToken.findFirst({
+      where: {
+        token,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!resetRecord) {
+      return res.status(400).json({ error: "Token inválido o expirado" });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (!decoded.type || decoded.type !== "reset") {
+      return res.status(400).json({ error: "Token inválido" });
+    }
+
+    res.json({ 
+      ok: true,
+      message: "Token válido",
+      usuarioId: decoded.id
+    });
+
+  } catch (error) {
+    console.error("❌ Error en validateResetToken:", error);
+    
+    if (error.name === "JsonWebTokenError") {
+      return res.status(400).json({ error: "Token inválido" });
+    }
+    
+    res.status(400).json({ error: "Token inválido o expirado" });
+  }
+};
+
+// ── RESET PASSWORD ────────────────────────────────
+const resetPassword = async (req, res) => {
+  try {
+    const { token, nuevaPassword } = req.body;
+
+    if (!token || !nuevaPassword) {
+      return res.status(400).json({ error: "Datos incompletos" });
+    }
+
+    if (nuevaPassword.length < 6) {
+      return res.status(400).json({ error: "La contraseña debe tener mínimo 6 caracteres" });
+    }
+
+    const resetRecord = await prisma.resetPasswordToken.findFirst({
+      where: {
+        token,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!resetRecord) {
+      return res.status(400).json({ error: "Token inválido o expirado" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (jwtErr) {
+      return res.status(400).json({ error: "Token inválido o expirado" });
+    }
+
+    if (!decoded.type || decoded.type !== "reset") {
+      return res.status(400).json({ error: "Token inválido" });
+    }
+
+    const hashed = await bcrypt.hash(nuevaPassword, 10);
+
+    await prisma.usuario.update({
+      where: { id: decoded.id },
+      data: { contrasena: hashed },
+    });
+
+    await prisma.resetPasswordToken.deleteMany({
+      where: { usuarioId: decoded.id },
+    });
+
+    console.log("✅ Contraseña actualizada para usuario:", decoded.id);
+
+    res.json({ 
+      message: "Contraseña actualizada correctamente",
+      ok: true
+    });
+
+  } catch (error) {
+    console.error("❌ Error en resetPassword:", error);
+    
+    if (error.name === "JsonWebTokenError") {
+      return res.status(400).json({ error: "Token inválido o expirado" });
+    }
+    
+    res.status(400).json({ error: "Error al actualizar contraseña" });
+  }
+};
+
+module.exports = {
+  login,
+  register,
+  forgotPassword,
+  validateResetToken,
+  resetPassword,
+};
