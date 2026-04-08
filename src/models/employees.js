@@ -76,22 +76,26 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
 };
 
 const update = async (id, data) => {
+  // ✅ Solo incluye los campos que realmente vienen en data
+  const updateData = {};
+
+  if (data.nombre          !== undefined) updateData.nombre          = data.nombre;
+  if (data.apellido        !== undefined) updateData.apellido        = data.apellido;
+  if (data.tipoDocumento   !== undefined) updateData.tipoDocumento   = data.tipoDocumento;
+  if (data.numeroDocumento !== undefined) updateData.numeroDocumento = data.numeroDocumento;
+  if (data.correo          !== undefined) updateData.correo          = data.correo;
+  if (data.telefono        !== undefined) updateData.telefono        = data.telefono;
+  if (data.ciudad          !== undefined) updateData.ciudad          = data.ciudad;
+  if (data.especialidad    !== undefined) updateData.especialidad    = data.especialidad;
+  if (data.direccion       !== undefined) updateData.direccion       = data.direccion;
+  if (data.fotoPerfil      !== undefined) updateData.fotoPerfil      = data.fotoPerfil;
+  if (data.estado          !== undefined) updateData.estado          = data.estado;
+
   const emp = await prisma.empleado.update({
     where: { id: Number(id) },
-    data: {
-      nombre:          data.nombre,
-      apellido:        data.apellido,
-      tipoDocumento:   data.tipoDocumento   ?? null,
-      numeroDocumento: data.numeroDocumento ?? null,
-      correo:          data.correo          ?? null,
-      telefono:        data.telefono        ?? null,
-      ciudad:          data.ciudad          ?? null,
-      especialidad:    data.especialidad    ?? null,
-      direccion:       data.direccion       ?? null,
-      fotoPerfil:      data.fotoPerfil      ?? null,
-      estado:          data.estado          ?? "Activo",
-    },
+    data:  updateData,  // ✅ solo los campos que cambian
   });
+
   return formatEmployee(emp);
 };
 
