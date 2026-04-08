@@ -64,7 +64,7 @@ const getAvailableAppointments = async () => {
     where:   { estado: { in: ["Pendiente", "Confirmada", "Confirmado"] } },
     include: {
       cliente:  true,
-      detalles: { include: { servicio: true } },
+      detalles: { include: { servicio: true, empleado: true } }, // ✅ agrega empleado
     },
     orderBy: { fecha: "desc" },
   });
@@ -75,10 +75,29 @@ const getAvailableAppointments = async () => {
     clientName:  c.cliente ? `${c.cliente.nombre} ${c.cliente.apellido}` : "Sin cliente",
     clientPhone: c.cliente?.telefono ?? "",
     date:        c.fecha.toISOString().split("T")[0],
-    time:        c.horario?.toISOString().slice(11, 16) ?? "00:00",
-    status:      c.estado,
-    service:     c.detalles.map(d => d.servicio?.nombre ?? "").join(", "),
-    price:       c.detalles.reduce((s, d) => s + Number(d.precio ?? 0), 0),
+
+    // ✅ Hora corregida
+    time: c.horario
+      ? `${String(c.horario.getHours()).padStart(2, "0")}:${String(c.horario.getMinutes()).padStart(2, "0")}`
+      : "00:00",
+
+    status:  c.estado,
+    service: c.detalles.map(d => d.servicio?.nombre ?? "").join(", "),
+
+    // ✅ Precio corregido
+    price: c.detalles.reduce((s, d) => {
+      const precio = d.precio !== null ? Number(d.precio) : Number(d.servicio?.precio ?? 0);
+      return s + precio;
+    }, 0),
+
+    // ✅ items que el frontend necesita para handleAppointmentSelect
+    items: c.detalles.map(d => ({
+      servicioId: d.servicioId,
+      nombre:     d.servicio?.nombre ?? "Servicio",
+      precio:     d.precio !== null ? Number(d.precio) : Number(d.servicio?.precio ?? 0),
+      cantidad:   1,
+      empleadoId: d.empleadoId ?? null,
+    })),
   }));
 };
 
