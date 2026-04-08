@@ -66,6 +66,12 @@ const create = async (req, res) => {
     if (tipo_documento && !TIPOS_DOC.includes(tipo_documento))
       return res.status(400).json({ error: "Tipo de documento inválido" });
 
+    if (!tipo_documento?.trim())
+      return res.status(400).json({ error: "El tipo de documento es obligatorio" });
+    
+    if (!numero_documento?.trim())
+      return res.status(400).json({ error: "El número de documento es obligatorio" });
+
     const data = {
       nombre: nombre.trim(),
       apellido: apellido.trim(),
@@ -200,7 +206,7 @@ const remove = async (req, res) => {
       });
     }
 
-    // 🔥 SOFT DELETE (MEJOR PRÁCTICA)
+    // SOFT DELETE (MEJOR PRÁCTICA)
     await prisma.empleado.update({
       where: { id },
       data: { estado: "Inactivo" }
