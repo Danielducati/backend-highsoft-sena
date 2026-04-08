@@ -1,13 +1,18 @@
 const express = require("express");
-const router  = express.Router();
-const ctrl    = require("../controllers/auth.controller");
+const {
+  login,
+  register,
+  forgotPassword,
+  validateResetToken,
+  resetPassword,
+} = require("../controllers/auth.controller");
 
-router.post("/login",  ctrl.login);
-router.post("/register", ctrl.register);
-router.get("/me",      ctrl.me);
+const router = express.Router();
 
-// Endpoint temporal para crear/resetear contraseña del admin
-// Borrarlo después de usarlo
-// router.post("/setup-admin", ctrl.setupAdmin);
+router.post("/login", login);
+router.post("/register", register);
+router.post("/forgot-password", forgotPassword);
+router.post("/validate-reset-token", validateResetToken);
+router.post("/reset-password", resetPassword);
 
-module.exports = { router };
+module.exports = router;

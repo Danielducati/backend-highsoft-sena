@@ -63,7 +63,7 @@ const getById = async (id) => {
   return cita ? formatCita(cita) : null;
 };
 
-const create = async ({ cliente, fecha, hora, notas, servicios }) => {
+const create = async ({ cliente, fecha, hora, notas, servicios, empleadoId }) => {
   return prisma.$transaction(async (tx) => {
     const cita = await tx.agendamientoCita.create({
       data: {

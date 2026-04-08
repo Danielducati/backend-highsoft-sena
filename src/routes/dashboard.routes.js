@@ -1,3 +1,4 @@
+//backend-highsoft-sena\src\routes\dashboard.routes.js
 const express = require("express");
 const router  = express.Router();
 const ctrl    = require("../controllers/dashboard.controller");
