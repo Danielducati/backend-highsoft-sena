@@ -1,3 +1,10 @@
+use highsoft_bd;
+INSERT INTO Roles (Nombre, Estado)
+VALUES 
+('Admin','Activo'),
+('Empleado','Activo'),
+('Cliente','Activo')
+
 -- ── 1. Insertar permisos solo si no existen ──────────────────────────────
 INSERT INTO Permisos (Nombre)
 SELECT v.Nombre
@@ -53,23 +60,25 @@ WHERE NOT EXISTS (
     WHERE p.Nombre = v.Nombre
 );
 
+-------------------------------------------------------------
 
--- ── 2. TODOS los permisos para Admin (sin duplicar) ─────────────────────
-INSERT INTO RolPermisos (FK_id_rol, FK_id_permiso)
+-- ── 2. TODOS los permisos para Admin ──────────────────────
+INSERT INTO Roles_Permisos (FK_id_rol, FK_id_permiso)
 SELECT r.PK_id_rol, p.PK_id_permisos
 FROM Roles r
 CROSS JOIN Permisos p
 WHERE r.Nombre = 'Admin'
 AND NOT EXISTS (
     SELECT 1
-    FROM RolPermisos rp
+    FROM Roles_Permisos rp
     WHERE rp.FK_id_rol = r.PK_id_rol
     AND rp.FK_id_permiso = p.PK_id_permisos
 );
 
+-------------------------------------------------------------
 
--- ── 3. Permisos para Empleado ───────────────────────────────────────────
-INSERT INTO RolPermisos (FK_id_rol, FK_id_permiso)
+-- ── 3. Permisos para Empleado ─────────────────────────────
+INSERT INTO Roles_Permisos (FK_id_rol, FK_id_permiso)
 SELECT r.PK_id_rol, p.PK_id_permisos
 FROM Roles r
 JOIN Permisos p ON (
@@ -83,14 +92,15 @@ JOIN Permisos p ON (
 WHERE r.Nombre = 'Empleado'
 AND NOT EXISTS (
     SELECT 1
-    FROM RolPermisos rp
+    FROM Roles_Permisos rp
     WHERE rp.FK_id_rol = r.PK_id_rol
     AND rp.FK_id_permiso = p.PK_id_permisos
 );
 
+-------------------------------------------------------------
 
--- ── 4. Permisos para Cliente ────────────────────────────────────────────
-INSERT INTO RolPermisos (FK_id_rol, FK_id_permiso)
+-- ── 4. Permisos para Cliente ──────────────────────────────
+INSERT INTO Roles_Permisos (FK_id_rol, FK_id_permiso)
 SELECT r.PK_id_rol, p.PK_id_permisos
 FROM Roles r
 JOIN Permisos p ON (
@@ -102,15 +112,16 @@ JOIN Permisos p ON (
 WHERE r.Nombre = 'Cliente'
 AND NOT EXISTS (
     SELECT 1
-    FROM RolPermisos rp
+    FROM Roles_Permisos rp
     WHERE rp.FK_id_rol = r.PK_id_rol
     AND rp.FK_id_permiso = p.PK_id_permisos
 );
 
+-------------------------------------------------------------
 
--- ── 5. Verificar permisos ───────────────────────────────────────────────
+-- ── 5. Verificar permisos ─────────────────────────────────
 SELECT r.Nombre AS Rol, p.Nombre AS Permiso
-FROM RolPermisos rp
+FROM Roles_Permisos rp
 JOIN Roles r ON r.PK_id_rol = rp.FK_id_rol
 JOIN Permisos p ON p.PK_id_permisos = rp.FK_id_permiso
 ORDER BY r.Nombre, p.Nombre;
