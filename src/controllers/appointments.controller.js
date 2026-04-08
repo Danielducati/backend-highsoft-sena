@@ -1,3 +1,4 @@
+//backend-highsoft-sena\src\controllers\appointments.controller.js
 const appointmentsModel = require("../models/appointments");
 const prisma = require("../config/prisma");
 const { appointmentErrors } = require("../utils/errorMessages");
@@ -53,7 +54,7 @@ const create = async (req, res) => {
 
   try {
 
-    const { cliente, fecha, hora, notas, servicios, empleadoId } = req.body;
+    const { cliente, fecha, hora, notas, servicios } = req.body;
 
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {
       return res.status(400).json({
@@ -85,33 +86,94 @@ const create = async (req, res) => {
       });
     }
 
-    if (empleadoId) {
+    // Extraer empleados únicos del array de servicios
+    const empleadoIds = [
+      ...new Set(
+        servicios
+          .map(s => Number(s.empleado_usuario))
+          .filter(id => !isNaN(id) && id > 0)
+      )
+    ];
 
-      const empleado = await prisma.empleado.findUnique({
-        where: { id: Number(empleadoId) }
-      });
+    console.log("Empleados a validar:", empleadoIds);
 
-      if (!empleado) {
-        return res.status(404).json({
-          error: appointmentErrors.EMPLOYEE_NOT_FOUND
-        });
-      }
+    if (empleadoIds.length > 0) {
 
-      const existingAppointment = await prisma.agendamientoCita.findFirst({
+      // Traer duración de cada servicio
+      const serviciosDB = await prisma.servicio.findMany({
         where: {
-          empleadoId: Number(empleadoId),
-          fecha: new Date(fecha),
-          hora: new Date(`1970-01-01T${hora}:00`),
-          estado: {
-            not: "Cancelada"
-          }
-        }
+          id: { in: servicios.map(s => Number(s.servicio)) }
+        },
+        select: { id: true, duracion: true }
       });
 
-      if (existingAppointment) {
-        return res.status(400).json({
-          error: appointmentErrors.TIME_ALREADY_BOOKED
+      const duracionMap = Object.fromEntries(
+        serviciosDB.map(s => [s.id, s.duracion || 60])
+      );
+
+      // Validar solapamiento por cada empleado
+      for (const empId of empleadoIds) {
+
+        // Servicios asignados a este empleado en la nueva cita
+        const serviciosDelEmpleado = servicios.filter(
+          s => Number(s.empleado_usuario) === empId
+        );
+
+        const duracionTotal = serviciosDelEmpleado.reduce(
+          (sum, s) => sum + (duracionMap[Number(s.servicio)] || 60),
+          0
+        );
+
+        const nuevaInicio = new Date(`1970-01-01T${hora}:00`);
+        const nuevaFin    = new Date(nuevaInicio.getTime() + duracionTotal * 60000);
+
+        console.log(`Empleado ${empId} → nuevaInicio: ${nuevaInicio}, nuevaFin: ${nuevaFin}`);
+
+        // Citas existentes del empleado en esa fecha
+        const citasEmpleado = await prisma.agendamientoCita.findMany({
+          where: {
+            fecha:  new Date(fecha),
+            estado: { not: "Cancelada" },
+            detalles: {
+              some: { empleadoId: empId }
+            }
+          },
+          include: {
+            detalles: {
+              where:   { empleadoId: empId },
+              include: { servicio: true }
+            }
+          }
         });
+
+        console.log(`Citas encontradas para empleado ${empId}:`, citasEmpleado.length);
+
+        for (const cita of citasEmpleado) {
+
+          const h = new Date(cita.horario);
+          const inicioExistente = new Date(
+            `1970-01-01T${String(h.getHours()).padStart(2, "0")}:${String(h.getMinutes()).padStart(2, "0")}:00`
+          );
+
+          for (const detalle of cita.detalles) {
+
+            const duracionExistente = detalle.servicio?.duracion || 60;
+            const finExistente      = new Date(inicioExistente.getTime() + duracionExistente * 60000);
+
+            console.log(`  Cita existente #${cita.id} → inicio: ${inicioExistente}, fin: ${finExistente}`);
+
+            const overlap = nuevaInicio < finExistente && nuevaFin > inicioExistente;
+
+            if (overlap) {
+              return res.status(400).json({
+                error: appointmentErrors.TIME_ALREADY_BOOKED
+              });
+            }
+
+          }
+
+        }
+
       }
 
     }
@@ -121,8 +183,7 @@ const create = async (req, res) => {
       fecha,
       hora,
       notas,
-      servicios,
-      empleadoId
+      servicios
     });
 
     res.status(201).json({
@@ -131,6 +192,8 @@ const create = async (req, res) => {
     });
 
   } catch (err) {
+
+    console.error(err);
 
     res.status(500).json({
       error: appointmentErrors.SERVER_ERROR
