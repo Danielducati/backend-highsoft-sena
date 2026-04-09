@@ -67,6 +67,7 @@ try {
     console.error("Error PATCH /users/:id/status:", err);
     res.status(500).json({ error: err.message });
 }
+
 };
 
 const deleteUser = async (req, res) => {
@@ -77,6 +78,7 @@ try {
     console.error("Error DELETE /users/:id:", err);
     res.status(500).json({ error: err.message });
 }
+
 };
 
 module.exports = { getAllUsers, getUserById, getRoles, createUser, updateUser, updateStatus, deleteUser };
