@@ -1,3 +1,4 @@
+//backend-highsoft-sena\src\routes\news.routes.js
 const express = require("express");
 const router  = express.Router();
 const ctrl    = require("../controllers/news.controller");

@@ -10,8 +10,10 @@ datasource db {
 model Rol {
   id            Int          @id(map: "PK__Roles__D2CA7D1BB9AAD356") @default(autoincrement()) @map("PK_id_rol")
   nombre        String       @map("Nombre") @db.VarChar(100)
+  descripcion String?
   estado        String       @default("Activo", map: "DF__Roles__Estado__37A5467C") @map("Estado") @db.VarChar(30)
   rolesPermisos RolPermiso[]
+  
   usuarios      Usuario[]
 
   @@map("Roles")
@@ -24,6 +26,7 @@ model Permiso {
 
   @@map("Permisos")
 }
+
 
 model RolPermiso {
   id        Int     @id(map: "PK__Roles_Pe__E5C0B51065434034") @default(autoincrement()) @map("PK_id_roles_permisos")
@@ -44,10 +47,22 @@ model Usuario {
   Cliente              Cliente[]
   empleado             Empleado[]
   rol                  Rol                   @relation(fields: [rolId], references: [id], onUpdate: NoAction, map: "FK_Usuarios_Rol")
-
+  foto_perfil          String?
+  resetPasswordTokens ResetPasswordToken[]
   @@map("Usuarios")
 }
-
+model ResetPasswordToken {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int      @map("FK_id_usuario")
+  token     String   @unique @db.VarChar(500)
+  expiresAt DateTime @map("expiresAt")
+  createdAt DateTime @default(now()) @map("createdAt")
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  
+  @@map("ResetPasswordToken")
+  @@index([usuarioId])
+  @@index([expiresAt])
+}
 model Empleado {
   id              Int     @id(map: "PK__Empleado__A5E3E03FE5C83B93") @default(autoincrement()) @map("PK_id_empleado")
   nombre          String  @db.VarChar(100)

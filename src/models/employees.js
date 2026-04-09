@@ -94,6 +94,7 @@ const update = async (id, data) => {
     where: { id: Number(id) },
     data:  updateData,
   });
+
   return formatEmployee(emp);
 };
 
