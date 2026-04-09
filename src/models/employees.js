@@ -76,7 +76,6 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
 };
 
 const update = async (id, data) => {
-  // ✅ Solo incluye los campos que realmente vienen en data
   const updateData = {};
 
   if (data.nombre          !== undefined) updateData.nombre          = data.nombre;
@@ -93,7 +92,7 @@ const update = async (id, data) => {
 
   const emp = await prisma.empleado.update({
     where: { id: Number(id) },
-    data:  updateData,  // ✅ solo los campos que cambian
+    data:  updateData,
   });
 
   return formatEmployee(emp);
