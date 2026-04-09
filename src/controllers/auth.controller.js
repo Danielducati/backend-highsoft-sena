@@ -49,45 +49,57 @@ const login = async (req, res) => {
 
 // ── REGISTER ───────────────────────────────────────
 const register = async (req, res) => {
-  const { email, password, fullName, apellido } = req.body;
-
-  if (!email || !password || !fullName || !apellido) {
-    return res.status(400).json({
-      error: "Datos incompletos",
-    });
-  }
+  const { nombre, apellido, correo, contrasena, telefono, tipo_documento, numero_documento, direccion } = req.body;
 
   try {
-    const existe = await prisma.usuario.findUnique({ where: { correo: email } });
+    const existe = await prisma.usuario.findUnique({ where: { correo } });
     if (existe) {
       return res.status(409).json({ error: "El correo ya existe" });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(contrasena, 10);
 
     const rolCliente = await prisma.rol.findFirst({
       where: { nombre: "Cliente" },
     });
 
-    const usuario = await prisma.usuario.create({
+    if (!rolCliente) {
+      return res.status(500).json({ error: "Rol Cliente no encontrado en la base de datos" });
+    }
+
+    await prisma.usuario.create({
       data: {
-        correo: email,
+        correo,
         contrasena: hashed,
         estado: "Activo",
         rolId: rolCliente.id,
+        Cliente: {
+          create: {
+            nombre,
+            apellido,
+            correo,
+            telefono:         telefono         || null,
+            tipo_documento:   tipo_documento   || null,
+            numero_documento: numero_documento || null,
+            direccion:        direccion        || null,
+            foto_perfil:      "",
+            Estado:           "Activo",
+          },
+        },
       },
     });
 
     try {
-      await sendWelcomeEmail(email, fullName);
-      console.log("✅ Email de bienvenida enviado a:", email);
+      await sendWelcomeEmail(correo, nombre);
+      console.log("✅ Email de bienvenida enviado a:", correo);
     } catch (emailErr) {
       console.warn("⚠️ Email de bienvenida no se envió:", emailErr);
     }
 
-    res.json({ message: "Usuario creado" });
+    res.status(201).json({ message: "Usuario registrado exitosamente" });
 
   } catch (err) {
+    console.error("❌ ERROR register:", err);
     res.status(500).json({ error: err.message });
   }
 };
