@@ -1,5 +1,6 @@
 // src/controllers/quotations.controller.js
 const quotationsModel = require("../models/quotations");
+const prisma = require("../config/prisma");
 
 const getAll = async (req, res) => {
   try {
@@ -126,6 +127,112 @@ const updateEstado = async (req, res) => {
       return res.status(400).json({ error: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(", ")}` });
 
     await quotationsModel.updateEstado(id, estado);
+
+    // Al aprobar, crear cita automáticamente si no existe ya una
+    if (estado === "approved") {
+      try {
+        const cotizacion = await prisma.cotizacion.findUnique({
+          where: { id },
+          include: { detalles: { include: { servicio: true } } }
+        });
+
+        if (cotizacion && cotizacion.fecha) {
+          // Verificar que no exista ya una cita para esta cotización
+          const citaExistente = await prisma.agendamientoCita.findFirst({
+            where: { cotizacionId: id }
+          });
+
+          if (!citaExistente) {
+            const cita = await prisma.agendamientoCita.create({
+              data: {
+                clienteId:    cotizacion.clienteId ?? null,
+                cotizacionId: cotizacion.id,
+                fecha:        cotizacion.fecha,
+                horario:      cotizacion.horaInicio ?? null,
+                estado:       "Pendiente",
+                notas:        cotizacion.notas ?? null,
+              }
+            });
+
+            // Para cada servicio, buscar un empleado disponible automáticamente
+            for (const detalle of cotizacion.detalles) {
+              let empleadoAsignado = null;
+
+              try {
+                // Empleados que pueden realizar este servicio
+                const empleadosDelServicio = await prisma.empleadoServicio.findMany({
+                  where: { servicioId: detalle.servicioId },
+                  include: { empleado: true }
+                });
+
+                const horaInicio = cotizacion.horaInicio
+                  ? new Date(cotizacion.horaInicio)
+                  : null;
+                const duracion = detalle.servicio?.duracion ?? 60;
+
+                for (const es of empleadosDelServicio) {
+                  if (es.empleado.estado !== "Activo") continue;
+
+                  // Verificar que no tenga citas solapadas ese día
+                  if (horaInicio && cotizacion.fecha) {
+                    const nuevaFin = new Date(horaInicio.getTime() + duracion * 60000);
+
+                    const citasSolapadas = await prisma.agendamientoCita.findMany({
+                      where: {
+                        fecha:  cotizacion.fecha,
+                        estado: { not: "Cancelada" },
+                        detalles: { some: { empleadoId: es.empleadoId } }
+                      },
+                      include: {
+                        detalles: {
+                          where:   { empleadoId: es.empleadoId },
+                          include: { servicio: true }
+                        }
+                      }
+                    });
+
+                    let disponible = true;
+                    for (const c of citasSolapadas) {
+                      const h = new Date(c.horario);
+                      const inicioExistente = new Date(`1970-01-01T${String(h.getUTCHours()).padStart(2,"0")}:${String(h.getUTCMinutes()).padStart(2,"0")}:00`);
+                      for (const d of c.detalles) {
+                        const finExistente = new Date(inicioExistente.getTime() + (d.servicio?.duracion ?? 60) * 60000);
+                        if (horaInicio < finExistente && nuevaFin > inicioExistente) {
+                          disponible = false;
+                          break;
+                        }
+                      }
+                      if (!disponible) break;
+                    }
+
+                    if (disponible) { empleadoAsignado = es.empleadoId; break; }
+                  } else {
+                    // Sin hora definida, asignar el primero activo
+                    empleadoAsignado = es.empleadoId;
+                    break;
+                  }
+                }
+              } catch (empErr) {
+                console.warn("⚠️ No se pudo asignar empleado para servicio", detalle.servicioId, empErr.message);
+              }
+
+              await prisma.agendamientoDetalle.create({
+                data: {
+                  citaId:     cita.id,
+                  servicioId: detalle.servicioId,
+                  empleadoId: empleadoAsignado,
+                  precio:     detalle.precio ?? 0,
+                }
+              });
+            }
+          }
+        }
+      } catch (citaErr) {
+        // No fallar si la cita no se pudo crear — solo loguear
+        console.error("⚠️ No se pudo crear la cita automática:", citaErr.message);
+      }
+    }
+
     res.json({ ok: true });
   } catch (err) {
     if (err.code === "P2025")

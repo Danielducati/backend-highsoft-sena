@@ -7,7 +7,10 @@ const getAll = async (req, res) => {
   try {
     let clienteId = null;
 
-    if (req.usuario?.rol === "Cliente") {
+    const rolNormalizado = (req.usuario?.rol ?? "").toLowerCase();
+    const esCliente = !["admin", "administrador", "empleado"].includes(rolNormalizado);
+
+    if (esCliente) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
@@ -45,8 +48,9 @@ const getOne = async (req, res) => {
       return res.status(404).json({ error: appointmentErrors.NOT_FOUND });
     }
 
-    // Si es Cliente, verificar que la cita le pertenece
-    if (req.usuario?.rol === "Cliente") {
+    // Si es Cliente (cualquier rol no admin/empleado), verificar que la cita le pertenece
+    const rolNorm = (req.usuario?.rol ?? "").toLowerCase();
+    if (!["admin", "administrador", "empleado"].includes(rolNorm)) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
@@ -70,8 +74,9 @@ const create = async (req, res) => {
 
     let { cliente, fecha, hora, notas, servicios } = req.body;
 
-    // Si el usuario logueado es Cliente, forzar su propio clienteId
-    if (req.usuario?.rol === "Cliente") {
+    // Si el usuario logueado no es admin/empleado, forzar su propio clienteId
+    const rolNormCreate = (req.usuario?.rol ?? "").toLowerCase();
+    if (!["admin", "administrador", "empleado"].includes(rolNormCreate)) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
