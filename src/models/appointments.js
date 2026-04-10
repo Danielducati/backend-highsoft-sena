@@ -47,8 +47,9 @@ const include = {
 };
 
 // ── Queries ───────────────────────────────────────────────────────────────────
-const getAll = async () => {
+const getAll = async (clienteId = null) => {
   const citas = await prisma.agendamientoCita.findMany({
+    where: clienteId ? { clienteId } : undefined,
     include,
     orderBy: [{ fecha: "desc" }, { horario: "desc" }],
   });

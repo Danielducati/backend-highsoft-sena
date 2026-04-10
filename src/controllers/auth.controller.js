@@ -8,14 +8,13 @@ const JWT_SECRET = process.env.JWT_SECRET || "highlife_secret_2024";
 // ── LOGIN ──────────────────────────────────────────
 const login = async (req, res) => {
   const { correo, contrasena } = req.body;
-
   if (!correo || !contrasena)
     return res.status(400).json({ error: "Correo y contraseña son requeridos" });
 
   try {
     const usuario = await prisma.usuario.findUnique({
       where: { correo },
-      include: { rol: true }, // 🔥 IMPORTANTE
+      include: { rol: true },
     });
 
     if (!usuario || usuario.estado !== "Activo")
@@ -26,21 +25,19 @@ const login = async (req, res) => {
       return res.status(401).json({ error: "Credenciales incorrectas" });
 
     const token = jwt.sign(
-      { id: usuario.id, correo: usuario.correo, rol: usuario.rol.nombre },
+      { id: usuario.id, correo: usuario.correo, rol: usuario.rol.nombre, rolId: usuario.rolId },
       JWT_SECRET,
       { expiresIn: "8h" }
     );
 
-    // 🔥 AQUÍ ESTÁ LA SOLUCIÓN REAL
     return res.json({
       token,
       usuario: {
         id: usuario.id,
         correo: usuario.correo,
-        rol: usuario.rol.nombre, // 👈 CLAVE PARA EL FRONT
+        rol: usuario.rol.nombre,
       },
     });
-
   } catch (err) {
     console.error("❌ ERROR LOGIN:", err);
     res.status(500).json({ error: err.message });
@@ -49,7 +46,14 @@ const login = async (req, res) => {
 
 // ── REGISTER ───────────────────────────────────────
 const register = async (req, res) => {
-  const { nombre, apellido, correo, contrasena, telefono, tipo_documento, numero_documento, direccion } = req.body;
+  const email    = req.body.email    || req.body.correo;
+  const password = req.body.password || req.body.contrasena;
+  const fullName = req.body.fullName || req.body.nombre;
+  const apellido = req.body.apellido;
+
+  if (!email || !password || !fullName || !apellido) {
+    return res.status(400).json({ error: "Datos incompletos" });
+  }
 
   try {
     const existe = await prisma.usuario.findUnique({ where: { correo } });
@@ -57,17 +61,10 @@ const register = async (req, res) => {
       return res.status(409).json({ error: "El correo ya existe" });
     }
 
-    const hashed = await bcrypt.hash(contrasena, 10);
+    const hashed = await bcrypt.hash(password, 10);
+    const rolCliente = await prisma.rol.findFirst({ where: { nombre: "Cliente" } });
 
-    const rolCliente = await prisma.rol.findFirst({
-      where: { nombre: "Cliente" },
-    });
-
-    if (!rolCliente) {
-      return res.status(500).json({ error: "Rol Cliente no encontrado en la base de datos" });
-    }
-
-    await prisma.usuario.create({
+    const nuevoUsuario = await prisma.usuario.create({
       data: {
         correo,
         contrasena: hashed,
@@ -89,6 +86,21 @@ const register = async (req, res) => {
       },
     });
 
+    // Crear también el perfil de cliente vinculado al usuario
+    await prisma.cliente.create({
+      data: {
+        nombre:        fullName,
+        apellido:      apellido,
+        correo:        email,
+        telefono:      req.body.phone ?? null,
+        tipo_documento:   req.body.tipocedula ?? null,
+        numero_documento: req.body.cedula     ?? null,
+        foto_perfil:   "",
+        Estado:        "Activo",
+        fk_id_usuario: nuevoUsuario.id,
+      },
+    });
+
     try {
       await sendWelcomeEmail(correo, nombre);
       console.log("✅ Email de bienvenida enviado a:", correo);
@@ -96,8 +108,7 @@ const register = async (req, res) => {
       console.warn("⚠️ Email de bienvenida no se envió:", emailErr);
     }
 
-    res.status(201).json({ message: "Usuario registrado exitosamente" });
-
+    res.json({ message: "Usuario creado" });
   } catch (err) {
     console.error("❌ ERROR register:", err);
     res.status(500).json({ error: err.message });
@@ -108,24 +119,17 @@ const register = async (req, res) => {
 const forgotPassword = async (req, res) => {
   try {
     const { correo } = req.body;
-
     if (!correo) {
       return res.status(400).json({ error: "Correo requerido" });
     }
 
-    const usuario = await prisma.usuario.findUnique({
-      where: { correo },
-    });
+    const usuario = await prisma.usuario.findUnique({ where: { correo } });
 
     if (!usuario) {
-      return res.json({ 
-        message: "Si el correo existe, recibirás un enlace de recuperación" 
-      });
+      return res.status(404).json({ error: "No existe una cuenta registrada con ese correo" });
     }
 
-    await prisma.resetPasswordToken.deleteMany({
-      where: { usuarioId: usuario.id },
-    });
+    await prisma.resetPasswordToken.deleteMany({ where: { usuarioId: usuario.id } });
 
     const resetToken = jwt.sign(
       { id: usuario.id, type: "reset" },
@@ -143,19 +147,14 @@ const forgotPassword = async (req, res) => {
 
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
 
-    try {
-      await sendResetPasswordEmail(correo, resetLink);
-      console.log("✅ Email de recuperación enviado a:", correo);
-    } catch (emailErr) {
-      console.error("❌ Error al enviar email:", emailErr);
-      return res.status(500).json({ error: "Error al enviar email" });
-    }
+    // sendResetPasswordEmail maneja su propio error internamente, no bloquea el flujo
+    await sendResetPasswordEmail(correo, resetLink);
+    console.log("✅ Email de recuperación enviado a:", correo);
 
-    res.json({ 
+    res.json({
       message: "Correo de recuperación enviado",
-      ...(process.env.NODE_ENV === "development" && { resetToken })
+      ...(process.env.NODE_ENV === "development" && { resetToken }),
     });
-
   } catch (error) {
     console.error("❌ Error en forgotPassword:", error);
     res.status(500).json({ error: "Error en recuperación" });
@@ -166,18 +165,12 @@ const forgotPassword = async (req, res) => {
 const validateResetToken = async (req, res) => {
   try {
     const { token } = req.body;
-
     if (!token) {
       return res.status(400).json({ error: "Token requerido" });
     }
 
     const resetRecord = await prisma.resetPasswordToken.findFirst({
-      where: {
-        token,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
+      where: { token, expiresAt: { gt: new Date() } },
     });
 
     if (!resetRecord) {
@@ -185,24 +178,16 @@ const validateResetToken = async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-
     if (!decoded.type || decoded.type !== "reset") {
       return res.status(400).json({ error: "Token inválido" });
     }
 
-    res.json({ 
-      ok: true,
-      message: "Token válido",
-      usuarioId: decoded.id
-    });
-
+    res.json({ ok: true, message: "Token válido", usuarioId: decoded.id });
   } catch (error) {
     console.error("❌ Error en validateResetToken:", error);
-    
     if (error.name === "JsonWebTokenError") {
       return res.status(400).json({ error: "Token inválido" });
     }
-    
     res.status(400).json({ error: "Token inválido o expirado" });
   }
 };
@@ -211,7 +196,6 @@ const validateResetToken = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { token, nuevaPassword } = req.body;
-
     if (!token || !nuevaPassword) {
       return res.status(400).json({ error: "Datos incompletos" });
     }
@@ -221,12 +205,7 @@ const resetPassword = async (req, res) => {
     }
 
     const resetRecord = await prisma.resetPasswordToken.findFirst({
-      where: {
-        token,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
+      where: { token, expiresAt: { gt: new Date() } },
     });
 
     if (!resetRecord) {
@@ -251,32 +230,45 @@ const resetPassword = async (req, res) => {
       data: { contrasena: hashed },
     });
 
-    await prisma.resetPasswordToken.deleteMany({
-      where: { usuarioId: decoded.id },
-    });
+    await prisma.resetPasswordToken.deleteMany({ where: { usuarioId: decoded.id } });
 
     console.log("✅ Contraseña actualizada para usuario:", decoded.id);
-
-    res.json({ 
-      message: "Contraseña actualizada correctamente",
-      ok: true
-    });
-
+    res.json({ message: "Contraseña actualizada correctamente", ok: true });
   } catch (error) {
     console.error("❌ Error en resetPassword:", error);
-    
     if (error.name === "JsonWebTokenError") {
       return res.status(400).json({ error: "Token inválido o expirado" });
     }
-    
     res.status(400).json({ error: "Error al actualizar contraseña" });
   }
 };
 
-module.exports = {
-  login,
-  register,
-  forgotPassword,
-  validateResetToken,
-  resetPassword,
+// ── ME (perfil del usuario logueado) ─────────────────────────
+const me = async (req, res) => {
+  try {
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: req.usuario.id },
+      include: { rol: true },
+    });
+
+    if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    let clientePerfil = null;
+    if (usuario.rol.nombre === "Cliente") {
+      clientePerfil = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: usuario.id },
+      });
+    }
+
+    res.json({
+      id:      usuario.id,
+      correo:  usuario.correo,
+      rol:     usuario.rol.nombre,
+      cliente: clientePerfil,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
+
+module.exports = { login, register, forgotPassword, validateResetToken, resetPassword, me };
