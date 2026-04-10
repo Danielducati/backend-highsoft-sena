@@ -9,6 +9,28 @@ const getAll = async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 
+// Devuelve el perfil del cliente logueado (sin necesitar permiso clientes.ver)
+const getMiPerfil = async (req, res) => {
+  try {
+    const cliente = await prisma.cliente.findFirst({
+      where: { fk_id_usuario: req.usuario.id },
+    });
+    if (!cliente) {
+      // El usuario no tiene perfil de cliente aún — devolver datos básicos del usuario
+      const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
+      if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
+      return res.json({
+        PK_id_cliente: null,
+        nombre:   req.usuario.correo.split("@")[0],
+        apellido: "",
+        telefono: "",
+        correo:   req.usuario.correo,
+      });
+    }
+    res.json(cliente);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};
+
 const getOne = async (req, res) => {
   try {
     const data = await clientsModel.getById(req.params.id);
@@ -39,8 +61,8 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
   try {
-    await clientsModel.update(req.params.id, req.body);
-    res.json({ ok: true });
+    const updated = await clientsModel.update(req.params.id, req.body);
+    res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 
@@ -88,4 +110,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, create, update, setStatus, remove };
+module.exports = { getAll, getMiPerfil, getOne, create, update, setStatus, remove };

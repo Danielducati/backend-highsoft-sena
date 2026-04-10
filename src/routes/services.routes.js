@@ -16,7 +16,7 @@ function formatService(s) {
   };
 }
 
-// GET /services
+// GET /services — público para usuarios autenticados (sin permiso especial)
 router.get("/", async (req, res) => {
   try {
     const soloActivos = req.query.all !== "true";
