@@ -58,14 +58,7 @@ const login = async (req, res) => {
 
 // ── REGISTER ───────────────────────────────────────
 const register = async (req, res) => {
-  const email    = req.body.email    || req.body.correo;
-  const password = req.body.password || req.body.contrasena;
-  const fullName = req.body.fullName || req.body.nombre;
-  const apellido = req.body.apellido;
-
-  if (!email || !password || !fullName || !apellido) {
-    return res.status(400).json({ error: "Datos incompletos" });
-  }
+  const { nombre, apellido, correo, contrasena, telefono, tipo_documento, numero_documento, direccion } = req.body;
 
   try {
     const existe = await prisma.usuario.findUnique({ where: { correo } });
@@ -73,10 +66,14 @@ const register = async (req, res) => {
       return res.status(409).json({ error: "El correo ya existe" });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(contrasena, 10);
     const rolCliente = await prisma.rol.findFirst({ where: { nombre: "Cliente" } });
 
-    const nuevoUsuario = await prisma.usuario.create({
+    if (!rolCliente) {
+      return res.status(500).json({ error: "Rol Cliente no encontrado en la base de datos" });
+    }
+
+    await prisma.usuario.create({
       data: {
         correo,
         contrasena: hashed,
@@ -98,21 +95,6 @@ const register = async (req, res) => {
       },
     });
 
-    // Crear también el perfil de cliente vinculado al usuario
-    await prisma.cliente.create({
-      data: {
-        nombre:        fullName,
-        apellido:      apellido,
-        correo:        email,
-        telefono:      req.body.phone ?? null,
-        tipo_documento:   req.body.tipocedula ?? null,
-        numero_documento: req.body.cedula     ?? null,
-        foto_perfil:   "",
-        Estado:        "Activo",
-        fk_id_usuario: nuevoUsuario.id,
-      },
-    });
-
     try {
       await sendWelcomeEmail(correo, nombre);
       console.log("✅ Email de bienvenida enviado a:", correo);
@@ -120,7 +102,7 @@ const register = async (req, res) => {
       console.warn("⚠️ Email de bienvenida no se envió:", emailErr);
     }
 
-    res.json({ message: "Usuario creado" });
+    res.status(201).json({ message: "Usuario registrado exitosamente" });
   } catch (err) {
     console.error("❌ ERROR register:", err);
     res.status(500).json({ error: err.message });
