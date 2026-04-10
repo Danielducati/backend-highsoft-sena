@@ -37,13 +37,20 @@ const createRol = async (req, res) => {
 const updateRol = async (req, res) => {
   try {
     const { nombre, descripcion, permisosIds, estado } = req.body;
-    
+
+    // Proteger el rol Administrador
+    const rolActual = await rolesModel.getById(req.params.id);
+    if (rolActual?.nombre?.toLowerCase() === "administrador") {
+      if (estado && estado !== "Activo")
+        return res.status(403).json({ error: "No se puede desactivar el rol Administrador" });
+    }
+
     // Si solo viene "estado", es un cambio de estado (toggle)
     if (estado && !nombre && !descripcion && !permisosIds) {
       const rol = await rolesModel.update(req.params.id, { estado });
       return res.json(rol);
     }
-    
+
     // Si vienen otros datos, es una actualización completa
     const rol = await rolesModel.update(req.params.id, { nombre, descripcion, permisosIds, estado });
     res.json(rol);
@@ -57,6 +64,11 @@ const updateRol = async (req, res) => {
 
 const deleteRol = async (req, res) => {
   try {
+    // Proteger el rol Administrador
+    const rolActual = await rolesModel.getById(req.params.id);
+    if (rolActual?.nombre?.toLowerCase() === "administrador")
+      return res.status(403).json({ error: "No se puede eliminar el rol Administrador" });
+
     const count = await rolesModel.countUsuarios(req.params.id);
     if (count > 0)
       return res.status(400).json({
