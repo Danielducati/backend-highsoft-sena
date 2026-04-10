@@ -53,7 +53,8 @@ const getById = async (id) => {
 const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo,
                         telefono, ciudad, especialidad, direccion, fotoPerfil,
                         contrasena, idRol }) => {
-  const hashed = await bcrypt.hash(contrasena || "empleado123", 10);
+  const passwordBase = contrasena?.trim() || numeroDocumento || "empleado123";
+  const hashed = await bcrypt.hash(passwordBase, 10);
 
   // Si no se pasa idRol, buscar el rol "Empleado" por nombre
   let rolId = idRol;

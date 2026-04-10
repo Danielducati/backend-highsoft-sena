@@ -60,7 +60,7 @@ const getById = async (id) => {
 };
 
 const create = async ({ firstName, lastName, documentType, document,
-                        email, phone, address, image }) => {
+                        email, phone, address, image, contrasena }) => {
   return prisma.$transaction(async (tx) => {
     // Correo duplicado en Usuario
     const existeUsuario = await tx.usuario.findUnique({ where: { correo: email } });
@@ -84,7 +84,8 @@ const create = async ({ firstName, lastName, documentType, document,
       }
     }
 
-    const hashed = await bcrypt.hash(document ?? "cliente123", 10);
+    const passwordBase = contrasena?.trim() || document || "cliente123";
+    const hashed = await bcrypt.hash(passwordBase, 10);
 
     const usuario = await tx.usuario.create({
       data: {

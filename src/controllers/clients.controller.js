@@ -41,7 +41,7 @@ const getOne = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { firstName, lastName, documentType, document, email, phone, address, image } = req.body;
+    const { firstName, lastName, documentType, document, email, phone, address, image, contrasena } = req.body;
 
     if (!firstName || !lastName || !email)
       return res.status(400).json({ error: "Nombre, apellido y correo son requeridos" });
@@ -50,7 +50,10 @@ const create = async (req, res) => {
     if (!emailRegex.test(email))
       return res.status(400).json({ error: "El correo no tiene un formato válido" });
 
-    const data = await clientsModel.create({ firstName, lastName, documentType, document, email, phone, address, image });
+    if (contrasena && contrasena.trim().length < 6)
+      return res.status(400).json({ error: "La contraseña debe tener mínimo 6 caracteres" });
+
+    const data = await clientsModel.create({ firstName, lastName, documentType, document, email, phone, address, image, contrasena });
     res.status(201).json(data);
   } catch (err) {
     if (err.message?.includes("ya existe"))
