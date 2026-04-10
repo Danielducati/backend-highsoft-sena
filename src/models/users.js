@@ -8,35 +8,31 @@ function formatUser(u, cliente = null) {
   const perfil     = isEmpleado ? u.empleado : cliente;
 
   return {
-    id:               u.id,
-    email:            u.correo,
-    name:             perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : u.correo,
-    firstName:        perfil?.nombre        ?? "",
-    lastName:         perfil?.apellido      ?? "",
-    phone:            perfil?.telefono      ?? "",
-    documentType:     perfil?.tipoDocumento  ?? perfil?.tipo_documento  ?? "",
-    document:         perfil?.numeroDocumento ?? perfil?.numero_documento ?? "",
-    role:             u.rol?.nombre         ?? "",
-    rolId:            u.rolId,
-    specialty:        u.empleado?.especialidad ?? "",
-    photo:            perfil?.fotoPerfil    ?? perfil?.foto_perfil ?? "",
-    isActive:         u.estado === "Activo",
-    estado:           u.estado,
-    createdAt:        "",
-    lastLogin:        "-",
-    assignedServices: [],
+    id:           u.id,
+    email:        u.correo,
+    name:         perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : u.correo,
+    firstName:    perfil?.nombre           ?? "",
+    lastName:     perfil?.apellido         ?? "",
+    phone:        perfil?.telefono         ?? "",
+    documentType: perfil?.tipoDocumento    ?? perfil?.tipo_documento    ?? "",
+    document:     perfil?.numeroDocumento  ?? perfil?.numero_documento  ?? "",
+    role:         u.rol?.nombre            ?? "",
+    rolId:        u.rolId,
+    photo:        perfil?.fotoPerfil       ?? perfil?.foto_perfil       ?? "",
+    isActive:     u.estado === "Activo",
+    estado:       u.estado,
   };
 }
 
 // ── Queries ───────────────────────────────────────────────────
 const getAll = async () => {
   const usuarios = await prisma.usuario.findMany({
-    include: { rol: true },
+    include: { rol: true, empleado: true },
     orderBy: { id: "desc" },
   });
 
   const result = await Promise.all(usuarios.map(async (u) => {
-    const empleado = await prisma.empleado.findFirst({ where: { usuarioId: u.id } });
+    const empleado = u.empleado?.[0] ?? null;
     const cliente  = await prisma.cliente.findFirst({ where: { fk_id_usuario: u.id } });
     return formatUser({ ...u, empleado }, cliente);
   }));
@@ -50,8 +46,9 @@ const getById = async (id) => {
     include: { rol: true, empleado: true },
   });
   if (!u) return null;
-  const cliente = await prisma.cliente.findFirst({ where: { fk_id_usuario: u.id } });
-  return formatUser(u, cliente);
+  const empleado = u.empleado?.[0] ?? null;
+  const cliente  = await prisma.cliente.findFirst({ where: { fk_id_usuario: u.id } });
+  return formatUser({ ...u, empleado }, cliente);
 };
 
 const getRoles = async () => {

@@ -3,6 +3,22 @@ const prisma = require("../config/prisma");
 const bcrypt = require("bcryptjs");
 
 function formatClient(c) {
+  // Calcular totalVisits y totalSpent desde relaciones incluidas
+  const citas = c.citas ?? [];
+  const ventas = c.Venta ?? [];
+
+  const totalVisits = citas.length;
+  const totalSpent  = ventas.reduce((sum, v) => sum + (Number(v.Total) || 0), 0);
+
+  // Última visita
+  const fechas = citas
+    .map(ci => ci.fecha ? new Date(ci.fecha) : null)
+    .filter(Boolean)
+    .sort((a, b) => b - a);
+  const lastVisit = fechas.length > 0
+    ? fechas[0].toLocaleDateString("es-CO")
+    : "-";
+
   return {
     id:               c.PK_id_cliente,
     firstName:        c.nombre,
@@ -15,22 +31,31 @@ function formatClient(c) {
     numero_documento: c.numero_documento ?? "",
     image:            c.foto_perfil     ?? "",
     isActive:         c.Estado === "Activo",
-    totalVisits: 0,
-    totalSpent:  0,
-    lastVisit:   "-",
+    totalVisits,
+    totalSpent,
+    lastVisit,
   };
 }
+
+const INCLUDE_STATS = {
+  citas:  { select: { id: true, fecha: true, estado: true } },
+  Venta:  { select: { PK_id_venta_encabezado: true, Total: true, Fecha: true } },
+};
 
 const getAll = async ({ soloActivos = false } = {}) => {
   const clientes = await prisma.cliente.findMany({
     where:   soloActivos ? { Estado: "Activo" } : {},
     orderBy: { nombre: "asc" },
+    include: INCLUDE_STATS,
   });
   return clientes.map(formatClient);
 };
 
 const getById = async (id) => {
-  const c = await prisma.cliente.findUnique({ where: { PK_id_cliente: Number(id) } });
+  const c = await prisma.cliente.findUnique({
+    where:   { PK_id_cliente: Number(id) },
+    include: INCLUDE_STATS,
+  });
   return c ? formatClient(c) : null;
 };
 

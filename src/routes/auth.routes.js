@@ -5,14 +5,17 @@ const {
   forgotPassword,
   validateResetToken,
   resetPassword,
+  me,
 } = require("../controllers/auth.controller");
+const { verificarToken } = require("../middlewares/auth.middleware");
 
 const router = express.Router();
 
 router.post("/login", login);
-router.post("/register", register);
+router.post("/register", validateClientRegister, register);
 router.post("/forgot-password", forgotPassword);
 router.post("/validate-reset-token", validateResetToken);
 router.post("/reset-password", resetPassword);
+router.get("/me", verificarToken, me);
 
 module.exports = router;
