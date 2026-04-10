@@ -17,7 +17,37 @@ const ESTADO_MAP_REVERSE = {
   Expirada:  "expired",
 };
 
+// Serializa empleados asignados por servicio dentro del campo notas
+// Formato: notas_usuario\n__EMPLEADOS__:{"servicioId":empleadoId,"name_servicioId":"nombre",...}
+function encodeEmpleados(notas, servicios) {
+  const map = {};
+  for (const sv of servicios) {
+    if (sv.empleado_id) {
+      const svcId = sv.id_servicio || sv.serviceId;
+      map[svcId]            = sv.empleado_id;
+      map[`name_${svcId}`]  = sv.empleado_name ?? "";
+    }
+  }
+  if (Object.keys(map).length === 0) return notas ?? null;
+  const tag = `__EMPLEADOS__:${JSON.stringify(map)}`;
+  return notas ? `${notas}\n${tag}` : tag;
+}
+
+function decodeEmpleados(notasRaw) {
+  if (!notasRaw) return { notas: "", empleadosMap: {} };
+  const idx = notasRaw.indexOf("__EMPLEADOS__:");
+  if (idx === -1) return { notas: notasRaw, empleadosMap: {} };
+  const notas = notasRaw.slice(0, idx).trimEnd();
+  try {
+    const empleadosMap = JSON.parse(notasRaw.slice(idx + "__EMPLEADOS__:".length));
+    return { notas, empleadosMap };
+  } catch {
+    return { notas: notasRaw, empleadosMap: {} };
+  }
+}
+
 function formatQuotation(c) {
+  const { notas, empleadosMap } = decodeEmpleados(c.notas);
   return {
     id:            c.id,
     FK_id_cliente: c.clienteId,
@@ -29,14 +59,20 @@ function formatQuotation(c) {
     discount:      Number(c.descuento ?? 0),
     iva:           Number(c.iva       ?? 0),
     total:         Number(c.total     ?? 0),
-    notes:         c.notas ?? "",
+    notes:         notas,
     status:        ESTADO_MAP_REVERSE[c.estado] ?? "pending",
-    items:         (c.detalles ?? []).map(d => ({
-      serviceId:   d.servicioId,
-      serviceName: d.servicio?.nombre ?? "Servicio",
-      price:       Number(d.precio    ?? 0),
-      quantity:    d.cantidad ?? 1,
-    })),
+    items:         (c.detalles ?? []).map(d => {
+      const empId   = empleadosMap[d.servicioId] ?? null;
+      const empName = empId ? (empleadosMap[`name_${d.servicioId}`] ?? null) : null;
+      return {
+        serviceId:    d.servicioId,
+        serviceName:  d.servicio?.nombre ?? "Servicio",
+        price:        Number(d.precio    ?? 0),
+        quantity:     d.cantidad ?? 1,
+        empleadoId:   empId   ? Number(empId) : null,
+        empleadoName: empName ?? null,
+      };
+    }),
   };
 }
 
@@ -63,22 +99,22 @@ const getById = async (id) => {
 };
 
 const create = async ({ clienteId, fecha, horaInicio, notas, descuento = 0, servicios }) => {
-  const subtotal = servicios.reduce((s, sv) => s + sv.precio * sv.cantidad, 0);
-  const iva      = subtotal * 0.19;
-  const total    = subtotal + iva - descuento;
+  const subtotal  = servicios.reduce((s, sv) => s + sv.precio * sv.cantidad, 0);
+  const total     = subtotal - descuento;
+  const notasFull = encodeEmpleados(notas, servicios);
 
   return prisma.$transaction(async (tx) => {
     const cot = await tx.cotizacion.create({
       data: {
         clienteId:  Number(clienteId),
-        fecha:      fecha ? new Date(fecha) : new Date(),
+        fecha:      fecha ? new Date(fecha + "T12:00:00") : new Date(),
         horaInicio: horaInicio ? new Date(`1970-01-01T${horaInicio}:00`) : null,
         subtotal,
-        iva,
+        iva:        0,
         valor:      subtotal,
         descuento,
         total,
-        notas:      notas ?? null,
+        notas:      notasFull,
         estado:     "Pendiente",
       },
     });
@@ -99,19 +135,19 @@ const create = async ({ clienteId, fecha, horaInicio, notas, descuento = 0, serv
 };
 
 const update = async (id, { clienteId, fecha, horaInicio, notas, descuento = 0, servicios }) => {
-  const subtotal = servicios.reduce((s, sv) => s + (sv.precio || sv.price) * (sv.cantidad || sv.quantity), 0);
-  const iva      = subtotal * 0.19;
-  const total    = subtotal + iva - descuento;
+  const subtotal  = servicios.reduce((s, sv) => s + (sv.precio || sv.price) * (sv.cantidad || sv.quantity), 0);
+  const total     = subtotal - descuento;
+  const notasFull = encodeEmpleados(notas, servicios);
 
   return prisma.$transaction(async (tx) => {
     await tx.cotizacion.update({
       where: { id: Number(id) },
       data: {
         clienteId:  Number(clienteId),
-        fecha:      fecha ? new Date(fecha) : undefined,
+        fecha:      fecha ? new Date(fecha + "T12:00:00") : undefined,
         horaInicio: horaInicio ? new Date(`1970-01-01T${horaInicio}:00`) : null,
-        subtotal, iva, valor: subtotal, descuento, total,
-        notas: notas ?? null,
+        subtotal, iva: 0, valor: subtotal, descuento, total,
+        notas: notasFull,
       },
     });
 
