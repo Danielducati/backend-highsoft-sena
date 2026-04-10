@@ -8,6 +8,7 @@ const {
   me,
 } = require("../controllers/auth.controller");
 const { verificarToken } = require("../middlewares/auth.middleware");
+const { validateClientRegister} = require ("../middlewares/validate.middleware");
 
 const router = express.Router();
 
