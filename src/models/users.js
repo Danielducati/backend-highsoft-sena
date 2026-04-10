@@ -59,7 +59,7 @@ const getRoles = async () => {
   });
 };
 
-const create = async ({ firstName, lastName, documentType, document, email, phone, role, password = "Highlife2024*" }) => {
+const create = async ({ firstName, lastName, documentType, document, email, phone, role, photo, password = "Highlife2024*" }) => {
   const rolFound = await prisma.rol.findFirst({ where: { nombre: role } });
   if (!rolFound) throw new Error(`Rol '${role}' no encontrado`);
 
@@ -86,7 +86,7 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
           numero_documento: document     ?? null,
           correo:           email,
           telefono:         phone        ?? null,
-          foto_perfil:      "",
+          foto_perfil:      photo        ?? "",
           Estado:           "Activo",
           fk_id_usuario:    usuario.id,
         },
@@ -100,7 +100,7 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
           numeroDocumento: document     ?? null,
           correo:          email,
           telefono:        phone        ?? null,
-          fotoPerfil:      null,
+          fotoPerfil:      photo        ?? null,
           estado:          "Activo",
           usuarioId:       usuario.id,
         },
@@ -111,7 +111,7 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
   });
 };
 
-const update = async (id, { firstName, lastName, documentType, document, email, phone, role }) => {
+const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo }) => {
   return prisma.$transaction(async (tx) => {
     if (role) {
       const rolFound = await tx.rol.findFirst({ where: { nombre: role } });
@@ -135,6 +135,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           numeroDocumento: document     ?? null,
           correo:          email        || "",
           telefono:        phone        ?? null,
+          ...(photo !== undefined && { fotoPerfil: photo }),
         },
       });
     }
@@ -151,6 +152,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           numero_documento: document     ?? null,
           correo:           email        || "",
           telefono:         phone        ?? null,
+          ...(photo !== undefined && { foto_perfil: photo }),
         },
       });
     }

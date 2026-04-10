@@ -99,19 +99,26 @@ const create = async ({ firstName, lastName, documentType, document,
 
 const update = async (id, { firstName, lastName, documentType, document,
                               email, phone, address, image, estado }) => {
+  const updateData = {
+    nombre:           firstName,
+    apellido:         lastName,
+    tipo_documento:   documentType ?? null,
+    numero_documento: document     ?? null,
+    correo:           email        ?? null,
+    telefono:         phone        ?? null,
+    direccion:        address      ?? null,
+    Estado:           estado       ?? "Activo",
+  };
+
+  // Solo actualizar foto si se envió una nueva
+  if (image !== undefined && image !== null && image !== "") {
+    updateData.foto_perfil = image;
+  }
+
   const c = await prisma.cliente.update({
     where: { PK_id_cliente: Number(id) },
-    data: {
-      nombre:           firstName,
-      apellido:         lastName,
-      tipo_documento:   documentType ?? null,
-      numero_documento: document     ?? null,
-      correo:           email        ?? null,
-      telefono:         phone        ?? null,
-      direccion:        address      ?? null,
-      foto_perfil:      image        ?? "",
-      Estado:           estado       ?? "Activo",
-    },
+    data:  updateData,
+    include: INCLUDE_STATS,
   });
   return formatClient(c);
 };
