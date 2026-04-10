@@ -5,26 +5,29 @@ const { appointmentErrors } = require("../utils/errorMessages");
 
 const getAll = async (req, res) => {
   try {
-    let clienteId = null;
+    let clienteId  = null;
+    let empleadoId = null;
 
-    const rolNormalizado = (req.usuario?.rol ?? "").toLowerCase();
-    const esCliente = !["admin", "administrador", "empleado"].includes(rolNormalizado);
+    const rol = (req.usuario?.rol ?? "").toLowerCase();
 
-    if (esCliente) {
+    if (rol === "empleado") {
+      // Filtrar solo las citas donde este empleado está asignado
+      const empRecord = await prisma.empleado.findFirst({
+        where: { usuarioId: req.usuario.id },
+        select: { id: true }
+      });
+      if (empRecord) empleadoId = empRecord.id;
+    } else if (!["admin", "administrador"].includes(rol)) {
+      // Es cliente
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
       });
-
-      if (!clienteRecord) {
-        // El usuario cliente aún no tiene perfil de cliente asociado
-        return res.json([]);
-      }
-
+      if (!clienteRecord) return res.json([]);
       clienteId = clienteRecord.PK_id_cliente;
     }
 
-    const data = await appointmentsModel.getAll(clienteId);
+    const data = await appointmentsModel.getAll(clienteId, empleadoId);
     res.json(data);
 
   } catch (err) {
@@ -74,19 +77,33 @@ const create = async (req, res) => {
 
     let { cliente, fecha, hora, notas, servicios } = req.body;
 
-    // Si el usuario logueado no es admin/empleado, forzar su propio clienteId
     const rolNormCreate = (req.usuario?.rol ?? "").toLowerCase();
+
+    // Si es cliente, forzar su propio clienteId
     if (!["admin", "administrador", "empleado"].includes(rolNormCreate)) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
       });
-
       if (!clienteRecord) {
         return res.status(400).json({ error: "No se encontró un perfil de cliente asociado a tu cuenta. Contacta al administrador." });
       }
-
       cliente = clienteRecord.PK_id_cliente;
+    }
+
+    // Si es empleado, forzar su propio empleadoId en todos los servicios
+    if (rolNormCreate === "empleado") {
+      const empRecord = await prisma.empleado.findFirst({
+        where: { usuarioId: req.usuario.id },
+        select: { id: true }
+      });
+      if (!empRecord) {
+        return res.status(400).json({ error: "No se encontró un perfil de empleado asociado a tu cuenta." });
+      }
+      // Sobreescribir el empleado en cada servicio con el empleado logueado
+      if (Array.isArray(servicios)) {
+        servicios = servicios.map(s => ({ ...s, empleado_usuario: empRecord.id }));
+      }
     }
 
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {

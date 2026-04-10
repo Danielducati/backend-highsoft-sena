@@ -11,9 +11,12 @@ const login = async (req, res) => {
   if (!correo || !contrasena)
     return res.status(400).json({ error: "Correo y contraseña son requeridos" });
 
+  // Normalizar correo — la BD siempre guarda en minúsculas
+  const correoNorm = correo.trim().toLowerCase();
+
   try {
     const usuario = await prisma.usuario.findUnique({
-      where: { correo },
+      where: { correo: correoNorm },
       include: { 
         rol: true,
         Cliente: true,
@@ -39,15 +42,23 @@ const login = async (req, res) => {
     const empleado = usuario.empleado?.[0] ?? null;
     const perfil   = cliente ?? empleado;
 
+    // Cargar permisos del rol
+    const permisos = await prisma.rolPermiso.findMany({
+      where:   { rolId: usuario.rolId },
+      include: { permiso: true },
+    });
+    const permisosNombres = permisos.map(rp => rp.permiso.nombre);
+
     return res.json({
       token,
       usuario: {
-        id:     usuario.id,
-        correo: usuario.correo,
-        rol:    usuario.rol.nombre,
-        nombre: perfil?.nombre    ?? "",
-        apellido: perfil?.apellido ?? "",
-        foto:   cliente?.foto_perfil ?? empleado?.fotoPerfil ?? usuario.foto_perfil ?? "",
+        id:       usuario.id,
+        correo:   usuario.correo,
+        rol:      usuario.rol.nombre,
+        nombre:   perfil?.nombre    ?? "",
+        apellido: perfil?.apellido  ?? "",
+        foto:     cliente?.foto_perfil ?? empleado?.fotoPerfil ?? usuario.foto_perfil ?? "",
+        permisos: permisosNombres,
       },
     });
   } catch (err) {
@@ -252,21 +263,51 @@ const me = async (req, res) => {
 
     if (rol === "cliente") {
       perfil = await prisma.cliente.findFirst({ where: { fk_id_usuario: usuario.id } });
-    } else if (rol === "empleado") {
+    } else if (rol !== "admin" && rol !== "administrador") {
       perfil = await prisma.empleado.findFirst({ where: { usuarioId: usuario.id } });
     }
 
+    // Permisos actualizados del rol
+    const permisos = await prisma.rolPermiso.findMany({
+      where:   { rolId: usuario.rolId },
+      include: { permiso: true },
+    });
+    const permisosNombres = permisos.map(rp => rp.permiso.nombre);
+
     res.json({
-      id:      usuario.id,
-      correo:  usuario.correo,
-      rol:     usuario.rol.nombre,
+      id:       usuario.id,
+      correo:   usuario.correo,
+      rol:      usuario.rol.nombre,
+      permisos: permisosNombres,
       perfil,
-      // compat anterior
-      cliente: rol === "cliente" ? perfil : null,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-module.exports = { login, register, forgotPassword, validateResetToken, resetPassword, me };
+// ── CHANGE PASSWORD (usuario logueado cambia su propia contraseña) ────────
+const changePassword = async (req, res) => {
+  try {
+    const { contrasenaActual, nuevaPassword } = req.body;
+    if (!contrasenaActual || !nuevaPassword)
+      return res.status(400).json({ error: "Contraseña actual y nueva son requeridas" });
+    if (nuevaPassword.length < 6)
+      return res.status(400).json({ error: "La nueva contraseña debe tener mínimo 6 caracteres" });
+
+    const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
+    if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    const valida = await bcrypt.compare(contrasenaActual, usuario.contrasena);
+    if (!valida) return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+
+    const hashed = await bcrypt.hash(nuevaPassword, 10);
+    await prisma.usuario.update({ where: { id: req.usuario.id }, data: { contrasena: hashed } });
+
+    res.json({ message: "Contraseña actualizada correctamente" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { login, register, forgotPassword, validateResetToken, resetPassword, me, changePassword };

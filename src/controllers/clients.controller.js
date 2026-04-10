@@ -63,7 +63,11 @@ const update = async (req, res) => {
   try {
     const updated = await clientsModel.update(req.params.id, req.body);
     res.json(updated);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (err.message?.toLowerCase().includes("ya existe"))
+      return res.status(409).json({ error: err.message });
+    res.status(500).json({ error: err.message });
+  }
 };
 
 const setStatus = async (req, res) => {

@@ -3,6 +3,21 @@ const employeesModel = require("../models/employees");
 const prisma = require("../config/prisma");
 
 // ======================================================
+// GET MI PERFIL (empleado logueado)
+// ======================================================
+const getMiPerfil = async (req, res) => {
+  try {
+    const emp = await prisma.empleado.findFirst({
+      where: { usuarioId: req.usuario.id },
+    });
+    if (!emp) return res.status(404).json({ error: "Perfil de empleado no encontrado" });
+    res.json(employeesModel.formatEmployee(emp));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ======================================================
 // GET ALL
 // ======================================================
 const getAll = async (req, res) => {
@@ -73,31 +88,35 @@ const create = async (req, res) => {
       return res.status(400).json({ error: "El número de documento es obligatorio" });
 
     const data = {
-      nombre: nombre.trim(),
-      apellido: apellido.trim(),
-      correo: correo.trim().toLowerCase(),
-      estado: "Activo", // 🔥 SIEMPRE inicia activo
+      nombre:    nombre.trim(),
+      apellido:  apellido.trim(),
+      correo:    correo.trim().toLowerCase(),
+      contrasena: contrasena?.trim() || "empleado123",
+      idRol:     id_rol ?? 2,
+      estado:    "Activo",
     };
 
-    if (tipo_documento) data.tipoDocumento = tipo_documento;
+    if (tipo_documento)   data.tipoDocumento   = tipo_documento;
     if (numero_documento) data.numeroDocumento = numero_documento;
-    if (telefono) data.telefono = telefono;
-    if (ciudad) data.ciudad = ciudad;
-    if (especialidad) data.especialidad = especialidad;
-    if (direccion) data.direccion = direccion;
-    if (foto_perfil) data.fotoPerfil = foto_perfil;
+    if (telefono)         data.telefono        = telefono;
+    if (ciudad)           data.ciudad          = ciudad;
+    if (especialidad)     data.especialidad    = especialidad;
+    if (direccion)        data.direccion       = direccion;
+    if (foto_perfil)      data.fotoPerfil      = foto_perfil;
 
     const nuevo = await employeesModel.create(data);
 
     res.status(201).json({
       mensaje: "Empleado creado exitosamente",
-      id: nuevo.id
+      id: nuevo.id,
+      contrasenaUsada: contrasena?.trim() ? "personalizada" : "empleado123",
     });
 
   } catch (err) {
     if (err.code === "P2002")
       return res.status(409).json({ error: "El correo ya existe" });
-
+    if (err.message?.toLowerCase().includes("ya existe"))
+      return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
@@ -178,10 +197,10 @@ const update = async (req, res) => {
   } catch (err) {
     if (err.code === "P2025")
       return res.status(404).json({ error: "Empleado no encontrado" });
-
     if (err.code === "P2002")
       return res.status(409).json({ error: "El correo ya existe" });
-
+    if (err.message?.toLowerCase().includes("ya existe"))
+      return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 };
@@ -219,4 +238,40 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, create, update, remove };
+// ======================================================
+// RESET PASSWORD (admin resetea la contraseña de un empleado)
+// ======================================================
+const resetPassword = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || isNaN(id))
+      return res.status(400).json({ error: "ID inválido" });
+
+    const { nuevaContrasena } = req.body;
+    if (!nuevaContrasena?.trim() || nuevaContrasena.trim().length < 6)
+      return res.status(400).json({ error: "La contraseña debe tener mínimo 6 caracteres" });
+
+    // Buscar el usuario vinculado al empleado
+    const empleado = await prisma.empleado.findUnique({
+      where: { id },
+      include: { usuario: true },
+    });
+
+    if (!empleado)
+      return res.status(404).json({ error: "Empleado no encontrado" });
+
+    const bcrypt = require("bcryptjs");
+    const hashed = await bcrypt.hash(nuevaContrasena.trim(), 10);
+
+    await prisma.usuario.update({
+      where: { id: empleado.usuarioId },
+      data:  { contrasena: hashed },
+    });
+
+    res.json({ mensaje: "Contraseña actualizada correctamente" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getAll, getOne, getMiPerfil, create, update, remove, resetPassword };
