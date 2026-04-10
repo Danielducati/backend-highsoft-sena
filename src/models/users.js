@@ -59,11 +59,12 @@ const getRoles = async () => {
   });
 };
 
-const create = async ({ firstName, lastName, documentType, document, email, phone, role, photo, password = "Highlife2024*" }) => {
+const create = async ({ firstName, lastName, documentType, document, email, phone, role, photo, contrasena }) => {
   const rolFound = await prisma.rol.findFirst({ where: { nombre: role } });
   if (!rolFound) throw new Error(`Rol '${role}' no encontrado`);
 
-  const hash = await bcrypt.hash(password, 10);
+  const passwordBase = contrasena?.trim() || document || "Highlife2024*";
+  const hash = await bcrypt.hash(passwordBase, 10);
 
   return prisma.$transaction(async (tx) => {
     const usuario = await tx.usuario.create({

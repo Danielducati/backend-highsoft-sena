@@ -41,6 +41,7 @@ const create = async (req, res) => {
       servicios,
       descuento,
       metodoPago, metodo_pago,
+      clienteOcasional,
     } = req.body;
 
     const TIPOS_VALIDOS = ["directo", "cita"];
@@ -78,10 +79,11 @@ const create = async (req, res) => {
       tipo,
       clienteId,
       clienteNombre,
-      citaId:     citaIdFinal,
+      citaId:           citaIdFinal,
       servicios,
-      descuento:  descuento  ?? 0,
-      metodoPago: metodoPagoFinal ?? null,
+      descuento:        descuento  ?? 0,
+      metodoPago:       metodoPagoFinal ?? null,
+      clienteOcasional: clienteOcasional ?? null,
     });
 
     res.status(201).json({ ok: true, id });
