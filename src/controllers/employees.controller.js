@@ -175,13 +175,26 @@ const update = async (req, res) => {
     if (estadoFinal && !ESTADOS_VALIDOS.includes(estadoFinal))
       return res.status(400).json({ error: "Estado inválido" });
 
+    // Validar duplicado de número de documento (excluyendo al empleado actual)
+    if (numero_documento !== undefined && numero_documento !== null && String(numero_documento).trim() !== "") {
+      const docDuplicate = await prisma.empleado.findFirst({
+        where: {
+          numeroDocumento: String(numero_documento).trim(),
+          id: { not: id },
+        },
+      });
+      if (docDuplicate) {
+        return res.status(409).json({ error: "Ya existe un empleado con ese número de documento" });
+      }
+    }
+
     const data = {};
 
     if (nombre !== undefined) data.nombre = nombre.trim();
     if (apellido !== undefined) data.apellido = apellido.trim();
     if (tipo_documento !== undefined) data.tipoDocumento = tipo_documento;
     if (numero_documento !== undefined) data.numeroDocumento = numero_documento;
-    if (correo !== undefined) data.correo = correo.trim().toLowerCase();
+    // El correo no se actualiza en Empleado para evitar inconsistencias con la tabla Usuarios
     if (telefono !== undefined) data.telefono = telefono;
     if (ciudad !== undefined) data.ciudad = ciudad;
     if (especialidad !== undefined) data.especialidad = especialidad;

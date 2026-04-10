@@ -144,7 +144,7 @@ const update = async (id, data) => {
   if (data.apellido        !== undefined) updateData.apellido        = data.apellido;
   if (data.tipoDocumento   !== undefined) updateData.tipoDocumento   = data.tipoDocumento;
   if (data.numeroDocumento !== undefined) updateData.numeroDocumento = data.numeroDocumento;
-  if (data.correo          !== undefined) updateData.correo          = data.correo;
+  // correo no se actualiza aquí para mantener consistencia con la tabla Usuarios
   if (data.telefono        !== undefined) updateData.telefono        = data.telefono;
   if (data.ciudad          !== undefined) updateData.ciudad          = data.ciudad;
   if (data.especialidad    !== undefined) updateData.especialidad    = data.especialidad;
