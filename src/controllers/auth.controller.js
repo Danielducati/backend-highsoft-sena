@@ -14,7 +14,11 @@ const login = async (req, res) => {
   try {
     const usuario = await prisma.usuario.findUnique({
       where: { correo },
-      include: { rol: true },
+      include: { 
+        rol: true,
+        Cliente: true,
+        empleado: true,
+      },
     });
 
     if (!usuario || usuario.estado !== "Activo")
@@ -30,12 +34,20 @@ const login = async (req, res) => {
       { expiresIn: "8h" }
     );
 
+    // Obtener nombre y foto del perfil vinculado
+    const cliente  = usuario.Cliente?.[0]  ?? null;
+    const empleado = usuario.empleado?.[0] ?? null;
+    const perfil   = cliente ?? empleado;
+
     return res.json({
       token,
       usuario: {
-        id: usuario.id,
+        id:     usuario.id,
         correo: usuario.correo,
-        rol: usuario.rol.nombre,
+        rol:    usuario.rol.nombre,
+        nombre: perfil?.nombre    ?? "",
+        apellido: perfil?.apellido ?? "",
+        foto:   cliente?.foto_perfil ?? empleado?.fotoPerfil ?? usuario.foto_perfil ?? "",
       },
     });
   } catch (err) {
@@ -235,18 +247,22 @@ const me = async (req, res) => {
 
     if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
 
-    let clientePerfil = null;
-    if (usuario.rol.nombre === "Cliente") {
-      clientePerfil = await prisma.cliente.findFirst({
-        where: { fk_id_usuario: usuario.id },
-      });
+    let perfil = null;
+    const rol = usuario.rol.nombre.toLowerCase();
+
+    if (rol === "cliente") {
+      perfil = await prisma.cliente.findFirst({ where: { fk_id_usuario: usuario.id } });
+    } else if (rol === "empleado") {
+      perfil = await prisma.empleado.findFirst({ where: { usuarioId: usuario.id } });
     }
 
     res.json({
       id:      usuario.id,
       correo:  usuario.correo,
       rol:     usuario.rol.nombre,
-      cliente: clientePerfil,
+      perfil,
+      // compat anterior
+      cliente: rol === "cliente" ? perfil : null,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
