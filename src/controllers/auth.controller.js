@@ -56,7 +56,7 @@ const register = async (req, res) => {
   }
 
   try {
-    const existe = await prisma.usuario.findUnique({ where: { correo: email } });
+    const existe = await prisma.usuario.findUnique({ where: { correo } });
     if (existe) {
       return res.status(409).json({ error: "El correo ya existe" });
     }
@@ -66,10 +66,23 @@ const register = async (req, res) => {
 
     const nuevoUsuario = await prisma.usuario.create({
       data: {
-        correo: email,
+        correo,
         contrasena: hashed,
         estado: "Activo",
         rolId: rolCliente.id,
+        Cliente: {
+          create: {
+            nombre,
+            apellido,
+            correo,
+            telefono:         telefono         || null,
+            tipo_documento:   tipo_documento   || null,
+            numero_documento: numero_documento || null,
+            direccion:        direccion        || null,
+            foto_perfil:      "",
+            Estado:           "Activo",
+          },
+        },
       },
     });
 
@@ -89,14 +102,15 @@ const register = async (req, res) => {
     });
 
     try {
-      await sendWelcomeEmail(email, fullName);
-      console.log("✅ Email de bienvenida enviado a:", email);
+      await sendWelcomeEmail(correo, nombre);
+      console.log("✅ Email de bienvenida enviado a:", correo);
     } catch (emailErr) {
       console.warn("⚠️ Email de bienvenida no se envió:", emailErr);
     }
 
     res.json({ message: "Usuario creado" });
   } catch (err) {
+    console.error("❌ ERROR register:", err);
     res.status(500).json({ error: err.message });
   }
 };
