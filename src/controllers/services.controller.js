@@ -281,5 +281,3 @@ module.exports = {
   getAllServices, getServiceById, createService, updateService, deactivateService,
   getAllCategories, getCategoryById, createCategory, updateCategory, deactivateCategory,
 };
-
-console.log(req.body);

@@ -5,17 +5,33 @@ const { appointmentErrors } = require("../utils/errorMessages");
 
 const getAll = async (req, res) => {
   try {
+    let clienteId  = null;
+    let empleadoId = null;
 
-    const data = await appointmentsModel.getAll();
+    const rol = (req.usuario?.rol ?? "").toLowerCase();
 
+    if (rol === "empleado") {
+      // Filtrar solo las citas donde este empleado está asignado
+      const empRecord = await prisma.empleado.findFirst({
+        where: { usuarioId: req.usuario.id },
+        select: { id: true }
+      });
+      if (empRecord) empleadoId = empRecord.id;
+    } else if (!["admin", "administrador"].includes(rol)) {
+      // Es cliente
+      const clienteRecord = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: req.usuario.id },
+        select: { PK_id_cliente: true }
+      });
+      if (!clienteRecord) return res.json([]);
+      clienteId = clienteRecord.PK_id_cliente;
+    }
+
+    const data = await appointmentsModel.getAll(clienteId, empleadoId);
     res.json(data);
 
   } catch (err) {
-
-    res.status(500).json({
-      error: appointmentErrors.SERVER_ERROR
-    });
-
+    res.status(500).json({ error: appointmentErrors.SERVER_ERROR });
   }
 };
 
@@ -26,27 +42,32 @@ const getOne = async (req, res) => {
     const id = Number(req.params.id);
 
     if (!id || isNaN(id)) {
-      return res.status(400).json({
-        error: appointmentErrors.INVALID_ID
-      });
+      return res.status(400).json({ error: appointmentErrors.INVALID_ID });
     }
 
     const data = await appointmentsModel.getById(id);
 
     if (!data) {
-      return res.status(404).json({
-        error: appointmentErrors.NOT_FOUND
+      return res.status(404).json({ error: appointmentErrors.NOT_FOUND });
+    }
+
+    // Si es Cliente (cualquier rol no admin/empleado), verificar que la cita le pertenece
+    const rolNorm = (req.usuario?.rol ?? "").toLowerCase();
+    if (!["admin", "administrador", "empleado"].includes(rolNorm)) {
+      const clienteRecord = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: req.usuario.id },
+        select: { PK_id_cliente: true }
       });
+
+      if (!clienteRecord || data.cliente_id !== clienteRecord.PK_id_cliente) {
+        return res.status(403).json({ error: "No tienes permiso para ver esta cita" });
+      }
     }
 
     res.json(data);
 
   } catch (err) {
-
-    res.status(500).json({
-      error: appointmentErrors.SERVER_ERROR
-    });
-
+    res.status(500).json({ error: appointmentErrors.SERVER_ERROR });
   }
 };
 
@@ -54,7 +75,36 @@ const create = async (req, res) => {
 
   try {
 
-    const { cliente, fecha, hora, notas, servicios } = req.body;
+    let { cliente, fecha, hora, notas, servicios } = req.body;
+
+    const rolNormCreate = (req.usuario?.rol ?? "").toLowerCase();
+
+    // Si es cliente, forzar su propio clienteId
+    if (!["admin", "administrador", "empleado"].includes(rolNormCreate)) {
+      const clienteRecord = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: req.usuario.id },
+        select: { PK_id_cliente: true }
+      });
+      if (!clienteRecord) {
+        return res.status(400).json({ error: "No se encontró un perfil de cliente asociado a tu cuenta. Contacta al administrador." });
+      }
+      cliente = clienteRecord.PK_id_cliente;
+    }
+
+    // Si es empleado, forzar su propio empleadoId en todos los servicios
+    if (rolNormCreate === "empleado") {
+      const empRecord = await prisma.empleado.findFirst({
+        where: { usuarioId: req.usuario.id },
+        select: { id: true }
+      });
+      if (!empRecord) {
+        return res.status(400).json({ error: "No se encontró un perfil de empleado asociado a tu cuenta." });
+      }
+      // Sobreescribir el empleado en cada servicio con el empleado logueado
+      if (Array.isArray(servicios)) {
+        servicios = servicios.map(s => ({ ...s, empleado_usuario: empRecord.id }));
+      }
+    }
 
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {
       return res.status(400).json({

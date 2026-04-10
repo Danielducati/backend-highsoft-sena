@@ -8,35 +8,31 @@ function formatUser(u, cliente = null) {
   const perfil     = isEmpleado ? u.empleado : cliente;
 
   return {
-    id:               u.id,
-    email:            u.correo,
-    name:             perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : u.correo,
-    firstName:        perfil?.nombre        ?? "",
-    lastName:         perfil?.apellido      ?? "",
-    phone:            perfil?.telefono      ?? "",
-    documentType:     perfil?.tipoDocumento  ?? perfil?.tipo_documento  ?? "",
-    document:         perfil?.numeroDocumento ?? perfil?.numero_documento ?? "",
-    role:             u.rol?.nombre         ?? "",
-    rolId:            u.rolId,
-    specialty:        u.empleado?.especialidad ?? "",
-    photo:            perfil?.fotoPerfil    ?? perfil?.foto_perfil ?? "",
-    isActive:         u.estado === "Activo",
-    estado:           u.estado,
-    createdAt:        "",
-    lastLogin:        "-",
-    assignedServices: [],
+    id:           u.id,
+    email:        u.correo,
+    name:         perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : u.correo,
+    firstName:    perfil?.nombre           ?? "",
+    lastName:     perfil?.apellido         ?? "",
+    phone:        perfil?.telefono         ?? "",
+    documentType: perfil?.tipoDocumento    ?? perfil?.tipo_documento    ?? "",
+    document:     perfil?.numeroDocumento  ?? perfil?.numero_documento  ?? "",
+    role:         u.rol?.nombre            ?? "",
+    rolId:        u.rolId,
+    photo:        perfil?.fotoPerfil       ?? perfil?.foto_perfil       ?? "",
+    isActive:     u.estado === "Activo",
+    estado:       u.estado,
   };
 }
 
 // ── Queries ───────────────────────────────────────────────────
 const getAll = async () => {
   const usuarios = await prisma.usuario.findMany({
-    include: { rol: true },
+    include: { rol: true, empleado: true },
     orderBy: { id: "desc" },
   });
 
   const result = await Promise.all(usuarios.map(async (u) => {
-    const empleado = await prisma.empleado.findFirst({ where: { usuarioId: u.id } });
+    const empleado = u.empleado?.[0] ?? null;
     const cliente  = await prisma.cliente.findFirst({ where: { fk_id_usuario: u.id } });
     return formatUser({ ...u, empleado }, cliente);
   }));
@@ -50,8 +46,9 @@ const getById = async (id) => {
     include: { rol: true, empleado: true },
   });
   if (!u) return null;
-  const cliente = await prisma.cliente.findFirst({ where: { fk_id_usuario: u.id } });
-  return formatUser(u, cliente);
+  const empleado = u.empleado?.[0] ?? null;
+  const cliente  = await prisma.cliente.findFirst({ where: { fk_id_usuario: u.id } });
+  return formatUser({ ...u, empleado }, cliente);
 };
 
 const getRoles = async () => {
@@ -62,7 +59,7 @@ const getRoles = async () => {
   });
 };
 
-const create = async ({ firstName, lastName, documentType, document, email, phone, role, password = "Highlife2024*" }) => {
+const create = async ({ firstName, lastName, documentType, document, email, phone, role, photo, password = "Highlife2024*" }) => {
   const rolFound = await prisma.rol.findFirst({ where: { nombre: role } });
   if (!rolFound) throw new Error(`Rol '${role}' no encontrado`);
 
@@ -89,7 +86,7 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
           numero_documento: document     ?? null,
           correo:           email,
           telefono:         phone        ?? null,
-          foto_perfil:      "",
+          foto_perfil:      photo        ?? "",
           Estado:           "Activo",
           fk_id_usuario:    usuario.id,
         },
@@ -103,7 +100,7 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
           numeroDocumento: document     ?? null,
           correo:          email,
           telefono:        phone        ?? null,
-          fotoPerfil:      null,
+          fotoPerfil:      photo        ?? null,
           estado:          "Activo",
           usuarioId:       usuario.id,
         },
@@ -114,7 +111,7 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
   });
 };
 
-const update = async (id, { firstName, lastName, documentType, document, email, phone, role }) => {
+const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo }) => {
   return prisma.$transaction(async (tx) => {
     if (role) {
       const rolFound = await tx.rol.findFirst({ where: { nombre: role } });
@@ -138,6 +135,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           numeroDocumento: document     ?? null,
           correo:          email        || "",
           telefono:        phone        ?? null,
+          ...(photo !== undefined && { fotoPerfil: photo }),
         },
       });
     }
@@ -154,6 +152,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           numero_documento: document     ?? null,
           correo:           email        || "",
           telefono:         phone        ?? null,
+          ...(photo !== undefined && { foto_perfil: photo }),
         },
       });
     }

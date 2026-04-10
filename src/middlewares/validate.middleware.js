@@ -3,10 +3,12 @@
 const error = (res, message, status = 400) =>
   res.status(status).json({ error: message });
 
-const emailRegex    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex    = /^[0-9+\-\s]{7,15}$/;
-const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
-const validDocTypes = ["CC", "TI", "CE", "PP", "NIT"];
+const emailRegex       = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phoneRegex       = /^[0-9+\-\s]{7,15}$/;
+const passwordRegex    = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+const onlyLettersRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$/;
+const onlyNumbersRegex = /^[0-9]+$/;
+const validDocTypes    = ["CC", "TI", "CE", "PP", "NIT"];
 
 // ── AUTH ──────────────────────────────────────────────────────
 const validateLogin = (req, res, next) => {
@@ -30,6 +32,64 @@ const validateRegister = (req, res, next) => {
     return error(res, "La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial");
   if (!Number.isInteger(Number(rolId)) || Number(rolId) <= 0)
     return error(res, "El rol debe ser un ID numérico válido");
+  next();
+};
+
+// ── REGISTRO PÚBLICO DE CLIENTE ───────────────────────────────
+const validateClientRegister = (req, res, next) => {
+  const { nombre, apellido, correo, contrasena, telefono, tipo_documento, numero_documento } = req.body;
+
+  // Campos obligatorios
+  if (!nombre?.trim())
+    return error(res, "El nombre es obligatorio");
+  if (!apellido?.trim())
+    return error(res, "El apellido es obligatorio");
+  if (!correo?.trim())
+    return error(res, "El correo es obligatorio");
+  if (!contrasena?.trim())
+    return error(res, "La contraseña es obligatoria");
+  if (!telefono?.trim())
+    return error(res, "El teléfono es obligatorio");
+  if (!tipo_documento?.trim())
+    return error(res, "El tipo de documento es obligatorio");
+  if (!numero_documento?.trim())
+    return error(res, "El número de documento es obligatorio");
+
+  // Nombre y apellido: solo letras
+  if (!onlyLettersRegex.test(nombre.trim()))
+    return error(res, "El nombre solo puede contener letras");
+  if (nombre.trim().length < 2)
+    return error(res, "El nombre debe tener al menos 2 caracteres");
+
+  if (!onlyLettersRegex.test(apellido.trim()))
+    return error(res, "El apellido solo puede contener letras");
+  if (apellido.trim().length < 2)
+    return error(res, "El apellido debe tener al menos 2 caracteres");
+
+  // Correo
+  if (!emailRegex.test(correo.trim()))
+    return error(res, "El correo no tiene un formato válido");
+
+  // Contraseña
+  if (contrasena.length < 6)
+    return error(res, "La contraseña debe tener al menos 6 caracteres");
+
+  // Teléfono: solo números
+  if (!onlyNumbersRegex.test(telefono.trim()))
+    return error(res, "El teléfono solo puede contener números");
+  if (telefono.trim().length < 7 || telefono.trim().length > 15)
+    return error(res, "El teléfono debe tener entre 7 y 15 dígitos");
+
+  // Tipo de documento
+  if (!validDocTypes.includes(tipo_documento.trim().toUpperCase()))
+    return error(res, `Tipo de documento inválido. Opciones: ${validDocTypes.join(", ")}`);
+
+  // Número de documento: solo números
+  if (!onlyNumbersRegex.test(numero_documento.trim()))
+    return error(res, "El número de documento solo puede contener números");
+  if (numero_documento.trim().length < 5 || numero_documento.trim().length > 20)
+    return error(res, "El número de documento debe tener entre 5 y 20 dígitos");
+
   next();
 };
 
@@ -159,7 +219,7 @@ const validateUserStatus = (req, res, next) => {
   next();
 };
 
-// ── CLIENTES (usan firstName/lastName igual que el frontend) ──
+// ── CLIENTES ──────────────────────────────────────────────────
 const validateCreateClient = (req, res, next) => {
   const { firstName, lastName, email, phone, document, documentType } = req.body;
   if (!firstName?.trim() || firstName.trim().length < 2)
@@ -206,7 +266,7 @@ const validateClientId = (req, res, next) => {
 };
 
 module.exports = {
-  validateLogin, validateRegister,
+  validateLogin, validateRegister, validateClientRegister,
   validateCreateRole, validateUpdateRole, validateRoleId,
   validateAssignPermissions, validatePermissionParams, validateRoleIdParam,
   validateCreateUser, validateUpdateUser, validateUserId, validateUserStatus,
