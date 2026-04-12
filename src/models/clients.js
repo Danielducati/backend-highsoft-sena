@@ -60,14 +60,32 @@ const getById = async (id) => {
 };
 
 const create = async ({ firstName, lastName, documentType, document,
-                        email, phone, address, image }) => {
+                        email, phone, address, image, contrasena }) => {
   return prisma.$transaction(async (tx) => {
-    const existente = await tx.usuario.findUnique({ where: { correo: email } });
-    if (existente) {
+    // Correo duplicado en Usuario
+    const existeUsuario = await tx.usuario.findUnique({ where: { correo: email } });
+    if (existeUsuario) {
       throw new Error(`Ya existe un usuario registrado con el correo ${email}`);
     }
 
-    const hashed = await bcrypt.hash(document ?? "cliente123", 10);
+    // Correo duplicado en Cliente
+    const existeCorreo = await tx.cliente.findFirst({ where: { correo: email } });
+    if (existeCorreo) {
+      throw new Error(`Ya existe un cliente registrado con el correo ${email}`);
+    }
+
+    // Documento duplicado (mismo tipo + número)
+    if (documentType && document) {
+      const existeDoc = await tx.cliente.findFirst({
+        where: { tipo_documento: documentType, numero_documento: document },
+      });
+      if (existeDoc) {
+        throw new Error(`Ya existe un cliente con ${documentType} ${document}`);
+      }
+    }
+
+    const passwordBase = contrasena?.trim() || document || "cliente123";
+    const hashed = await bcrypt.hash(passwordBase, 10);
 
     const usuario = await tx.usuario.create({
       data: {
@@ -99,6 +117,32 @@ const create = async ({ firstName, lastName, documentType, document,
 
 const update = async (id, { firstName, lastName, documentType, document,
                               email, phone, address, image, estado }) => {
+  const clienteId = Number(id);
+
+  // Correo duplicado en otro cliente
+  if (email) {
+    const existeCorreo = await prisma.cliente.findFirst({
+      where: { correo: email, NOT: { PK_id_cliente: clienteId } },
+    });
+    if (existeCorreo) {
+      throw new Error(`Ya existe un cliente registrado con el correo ${email}`);
+    }
+  }
+
+  // Documento duplicado en otro cliente
+  if (documentType && document) {
+    const existeDoc = await prisma.cliente.findFirst({
+      where: {
+        tipo_documento:   documentType,
+        numero_documento: document,
+        NOT: { PK_id_cliente: clienteId },
+      },
+    });
+    if (existeDoc) {
+      throw new Error(`Ya existe un cliente con ${documentType} ${document}`);
+    }
+  }
+
   const updateData = {
     nombre:           firstName,
     apellido:         lastName,
@@ -110,13 +154,12 @@ const update = async (id, { firstName, lastName, documentType, document,
     Estado:           estado       ?? "Activo",
   };
 
-  // Solo actualizar foto si se envió una nueva
   if (image !== undefined && image !== null && image !== "") {
     updateData.foto_perfil = image;
   }
 
   const c = await prisma.cliente.update({
-    where: { PK_id_cliente: Number(id) },
+    where: { PK_id_cliente: clienteId },
     data:  updateData,
     include: INCLUDE_STATS,
   });
