@@ -68,24 +68,8 @@ const create = async ({ firstName, lastName, documentType, document,
       throw new Error(`Ya existe un usuario registrado con el correo ${email}`);
     }
 
-    // Correo duplicado en Cliente
-    const existeCorreo = await tx.cliente.findFirst({ where: { correo: email } });
-    if (existeCorreo) {
-      throw new Error(`Ya existe un cliente registrado con el correo ${email}`);
-    }
-
-    // Documento duplicado (mismo tipo + número)
-    if (documentType && document) {
-      const existeDoc = await tx.cliente.findFirst({
-        where: { tipo_documento: documentType, numero_documento: document },
-      });
-      if (existeDoc) {
-        throw new Error(`Ya existe un cliente con ${documentType} ${document}`);
-      }
-    }
-
-    const passwordBase = contrasena?.trim() || document || "cliente123";
-    const hashed = await bcrypt.hash(passwordBase, 10);
+    const finalPassword = contrasena || document || "Highlife2024*";
+    const hashed = await bcrypt.hash(finalPassword, 10);
 
     const usuario = await tx.usuario.create({
       data: {
