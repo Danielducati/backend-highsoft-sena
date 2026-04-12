@@ -59,11 +59,12 @@ const getRoles = async () => {
   });
 };
 
-const create = async ({ firstName, lastName, documentType, document, email, phone, role, photo, password = "Highlife2024*" }) => {
+const create = async ({ firstName, lastName, documentType, document, email, phone, role, photo, password, contrasena }) => {
+  const finalPassword = contrasena || password || document || "Highlife2024*";
   const rolFound = await prisma.rol.findFirst({ where: { nombre: role } });
   if (!rolFound) throw new Error(`Rol '${role}' no encontrado`);
 
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(finalPassword, 10);
 
   return prisma.$transaction(async (tx) => {
     const usuario = await tx.usuario.create({
@@ -113,15 +114,18 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
 
 const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo }) => {
   return prisma.$transaction(async (tx) => {
+    // Siempre actualizar el correo del usuario
+    const usuarioData = { correo: email };
+
     if (role) {
       const rolFound = await tx.rol.findFirst({ where: { nombre: role } });
-      if (rolFound) {
-        await tx.usuario.update({
-          where: { id: Number(id) },
-          data:  { correo: email, rolId: rolFound.id },
-        });
-      }
+      if (rolFound) usuarioData.rolId = rolFound.id;
     }
+
+    await tx.usuario.update({
+      where: { id: Number(id) },
+      data:  usuarioData,
+    });
 
     // Actualizar empleado si existe
     const empleado = await tx.empleado.findFirst({ where: { usuarioId: Number(id) } });
@@ -135,7 +139,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           numeroDocumento: document     ?? null,
           correo:          email        || "",
           telefono:        phone        ?? null,
-          ...(photo !== undefined && { fotoPerfil: photo }),
+          ...(photo !== undefined && photo !== "" && { fotoPerfil: photo }),
         },
       });
     }
@@ -152,7 +156,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           numero_documento: document     ?? null,
           correo:           email        || "",
           telefono:         phone        ?? null,
-          ...(photo !== undefined && { foto_perfil: photo }),
+          ...(photo !== undefined && photo !== "" && { foto_perfil: photo }),
         },
       });
     }
@@ -170,9 +174,34 @@ const updateStatus = async (id, isActive) => {
 
 const remove = async (id) => {
   return prisma.$transaction(async (tx) => {
-    await tx.empleado.deleteMany({ where: { usuarioId: Number(id) } });
-    await tx.cliente.deleteMany({  where: { fk_id_usuario: Number(id) } });
-    await tx.usuario.delete({      where: { id: Number(id) } });
+    const empleado = await tx.empleado.findFirst({ where: { usuarioId: Number(id) } });
+
+    if (empleado) {
+      // Borrar novedades de los horarios del empleado
+      await tx.novedad.deleteMany({
+        where: { horario: { empleadoId: empleado.id } },
+      });
+      // Borrar horarios
+      await tx.horario.deleteMany({ where: { empleadoId: empleado.id } });
+      // Desasociar agendamiento detalles (poner empleadoId en null)
+      await tx.agendamientoDetalle.updateMany({
+        where: { empleadoId: empleado.id },
+        data:  { empleadoId: null },
+      });
+      // Desasociar venta detalles (poner empleadoId en null)
+      await tx.ventaDetalle.updateMany({
+        where: { empleadoId: empleado.id },
+        data:  { empleadoId: null },
+      });
+      // Borrar relaciones empleado-servicio
+      await tx.empleadoServicio.deleteMany({ where: { empleadoId: empleado.id } });
+      // Borrar el empleado
+      await tx.empleado.delete({ where: { id: empleado.id } });
+    }
+
+    await tx.cliente.deleteMany({ where: { fk_id_usuario: Number(id) } });
+    await tx.resetPasswordToken.deleteMany({ where: { usuarioId: Number(id) } });
+    await tx.usuario.delete({ where: { id: Number(id) } });
     return { ok: true };
   });
 };

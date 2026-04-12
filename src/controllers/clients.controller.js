@@ -12,21 +12,31 @@ const getAll = async (req, res) => {
 // Devuelve el perfil del cliente logueado (sin necesitar permiso clientes.ver)
 const getMiPerfil = async (req, res) => {
   try {
-    const cliente = await prisma.cliente.findFirst({
+    let cliente = await prisma.cliente.findFirst({
       where: { fk_id_usuario: req.usuario.id },
     });
+
+    // Si no existe, crearlo automáticamente con datos básicos del usuario
     if (!cliente) {
-      // El usuario no tiene perfil de cliente aún — devolver datos básicos del usuario
       const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
       if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
-      return res.json({
-        PK_id_cliente: null,
-        nombre:   req.usuario.correo.split("@")[0],
-        apellido: "",
-        telefono: "",
-        correo:   req.usuario.correo,
+
+      cliente = await prisma.cliente.create({
+        data: {
+          nombre:           usuario.correo.split("@")[0],
+          apellido:         "",
+          tipo_documento:   null,
+          numero_documento: null,
+          correo:           usuario.correo,
+          telefono:         null,
+          direccion:        null,
+          foto_perfil:      "",
+          Estado:           "Activo",
+          fk_id_usuario:    usuario.id,
+        },
       });
     }
+
     res.json(cliente);
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
@@ -41,7 +51,7 @@ const getOne = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { firstName, lastName, documentType, document, email, phone, address, image } = req.body;
+    const { firstName, lastName, documentType, document, email, phone, address, image, contrasena } = req.body;
 
     if (!firstName || !lastName || !email)
       return res.status(400).json({ error: "Nombre, apellido y correo son requeridos" });
@@ -50,7 +60,7 @@ const create = async (req, res) => {
     if (!emailRegex.test(email))
       return res.status(400).json({ error: "El correo no tiene un formato válido" });
 
-    const data = await clientsModel.create({ firstName, lastName, documentType, document, email, phone, address, image });
+    const data = await clientsModel.create({ firstName, lastName, documentType, document, email, phone, address, image, contrasena });
     res.status(201).json(data);
   } catch (err) {
     if (err.message?.includes("ya existe"))
@@ -98,8 +108,10 @@ const remove = async (req, res) => {
     const cliente = await prisma.cliente.findUnique({ where: { PK_id_cliente: id } });
     await prisma.$transaction(async (tx) => {
       await tx.cliente.delete({ where: { PK_id_cliente: id } });
-      if (cliente?.fk_id_usuario)
+      if (cliente?.fk_id_usuario) {
+        await tx.resetPasswordToken.deleteMany({ where: { usuarioId: cliente.fk_id_usuario } });
         await tx.usuario.delete({ where: { id: cliente.fk_id_usuario } });
+      }
     });
 
     res.json({ mensaje: "Cliente eliminado exitosamente" });

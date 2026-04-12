@@ -30,12 +30,41 @@ const login = async (req, res) => {
       { expiresIn: "8h" }
     );
 
+    // Buscar nombre y apellido del perfil (empleado o cliente)
+    let nombre = "";
+    let apellido = "";
+    let foto = "";
+
+    const empleado = await prisma.empleado.findFirst({
+      where: { usuarioId: usuario.id },
+      select: { nombre: true, apellido: true, fotoPerfil: true },
+    });
+
+    if (empleado) {
+      nombre   = empleado.nombre   ?? "";
+      apellido = empleado.apellido ?? "";
+      foto     = empleado.fotoPerfil ?? "";
+    } else {
+      const cliente = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: usuario.id },
+        select: { nombre: true, apellido: true, foto_perfil: true },
+      });
+      if (cliente) {
+        nombre   = cliente.nombre   ?? "";
+        apellido = cliente.apellido ?? "";
+        foto     = cliente.foto_perfil ?? "";
+      }
+    }
+
     return res.json({
       token,
       usuario: {
-        id: usuario.id,
-        correo: usuario.correo,
-        rol: usuario.rol.nombre,
+        id:      usuario.id,
+        correo:  usuario.correo,
+        rol:     usuario.rol.nombre,
+        nombre,
+        apellido,
+        foto,
       },
     });
   } catch (err) {

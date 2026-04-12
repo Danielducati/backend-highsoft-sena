@@ -384,5 +384,40 @@ module.exports = {
   update,
   updateStatus,
   cancel,
-  remove
+  cancelMiCita,
+  remove,
 };
+
+async function cancelMiCita(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ error: appointmentErrors.INVALID_ID });
+    }
+
+    const clienteRecord = await prisma.cliente.findFirst({
+      where: { fk_id_usuario: req.usuario.id },
+      select: { PK_id_cliente: true },
+    });
+
+    if (!clienteRecord) {
+      return res.status(403).json({ error: "No tienes un perfil de cliente asociado" });
+    }
+
+    const cita = await prisma.agendamientoCita.findUnique({ where: { id } });
+    if (!cita) {
+      return res.status(404).json({ error: appointmentErrors.NOT_FOUND });
+    }
+
+    if (cita.clienteId !== clienteRecord.PK_id_cliente) {
+      return res.status(403).json({ error: "No tienes permiso para cancelar esta cita" });
+    }
+
+    await appointmentsModel.updateStatus(id, "cancelled");
+    res.json({ ok: true });
+
+  } catch (err) {
+    console.error("Error cancelMiCita:", err);
+    res.status(500).json({ error: appointmentErrors.SERVER_ERROR });
+  }
+}

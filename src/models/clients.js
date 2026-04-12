@@ -60,14 +60,15 @@ const getById = async (id) => {
 };
 
 const create = async ({ firstName, lastName, documentType, document,
-                        email, phone, address, image }) => {
+                        email, phone, address, image, contrasena }) => {
   return prisma.$transaction(async (tx) => {
     const existente = await tx.usuario.findUnique({ where: { correo: email } });
     if (existente) {
       throw new Error(`Ya existe un usuario registrado con el correo ${email}`);
     }
 
-    const hashed = await bcrypt.hash(document ?? "cliente123", 10);
+    const finalPassword = contrasena || document || "Highlife2024*";
+    const hashed = await bcrypt.hash(finalPassword, 10);
 
     const usuario = await tx.usuario.create({
       data: {
