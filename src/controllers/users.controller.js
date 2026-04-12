@@ -43,8 +43,8 @@ try {
     res.status(201).json(result);
 } catch (err) {
     console.error("Error POST /users:", err);
-    if (err.code === "P2002" || err.message?.includes("UNIQUE"))
-    return res.status(400).json({ error: "El correo ya está registrado" });
+    if (err.code === "P2002" || err.message?.includes("UNIQUE") || err.message?.toLowerCase().includes("ya existe"))
+    return res.status(409).json({ error: err.message });
     if (err.message?.includes("no encontrado"))
     return res.status(400).json({ error: err.message });
     res.status(500).json({ error: err.message });

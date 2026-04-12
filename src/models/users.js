@@ -63,6 +63,23 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
   const rolFound = await prisma.rol.findFirst({ where: { nombre: role } });
   if (!rolFound) throw new Error(`Rol '${role}' no encontrado`);
 
+  // Correo duplicado
+  const existeCorreo = await prisma.usuario.findUnique({ where: { correo: email } });
+  if (existeCorreo) throw new Error(`Ya existe un usuario registrado con el correo ${email}`);
+
+  // Documento duplicado en empleados
+  if (documentType && document) {
+    const existeDocEmp = await prisma.empleado.findFirst({
+      where: { tipoDocumento: documentType, numeroDocumento: document }
+    });
+    if (existeDocEmp) throw new Error(`Ya existe un empleado con ${documentType} ${document}`);
+
+    const existeDocCli = await prisma.cliente.findFirst({
+      where: { tipo_documento: documentType, numero_documento: document }
+    });
+    if (existeDocCli) throw new Error(`Ya existe un cliente con ${documentType} ${document}`);
+  }
+
   const passwordBase = contrasena?.trim() || document || "Highlife2024*";
   const hash = await bcrypt.hash(passwordBase, 10);
 

@@ -1,5 +1,5 @@
 // src/seed.js
-// Crea usuarios de prueba: admin, empleado y cliente
+// Crea usuarios de prueba: admin, un empleado por cada especialidad y cliente
 // Uso: node src/seed.js
 // Es seguro correrlo varias veces — no duplica datos
 
@@ -20,11 +20,15 @@ async function seed() {
   console.log("Iniciando seed...\n");
 
   // 1. Verificar roles necesarios
-  const rolAdmin    = await prisma.rol.findFirst({ where: { nombre: "Admin" } });
-  const rolEmpleado = await prisma.rol.findFirst({ where: { nombre: "Empleado" } });
-  const rolCliente  = await prisma.rol.findFirst({ where: { nombre: "Cliente" } });
+  const rolesEmpleado = ["Manicurista", "Estilista", "Barbero", "Masajista", "Cosmetóloga"];
 
-  if (!rolAdmin || !rolEmpleado || !rolCliente) {
+  const rolAdmin   = await prisma.rol.findFirst({ where: { nombre: "Admin" } });
+  const rolCliente = await prisma.rol.findFirst({ where: { nombre: "Cliente" } });
+  const rolesEmp   = await prisma.rol.findMany({
+    where: { nombre: { in: rolesEmpleado } },
+  });
+
+  if (!rolAdmin || !rolCliente || rolesEmp.length !== rolesEmpleado.length) {
     console.error("Faltan roles en la BD. Corre primero el seed completo de permisos.");
     await prisma.$disconnect();
     process.exit(1);
@@ -34,28 +38,39 @@ async function seed() {
   const { creado: adminCreado } = await createUsuario(
     "admin@highlife.com", "admin123", rolAdmin.id
   );
-  console.log(adminCreado ? "Usuario admin creado" : "Usuario admin ya existe");
+  console.log(adminCreado ? "✔ Usuario admin creado" : "– Usuario admin ya existe");
 
-  // 3. Empleado
-  const { usuario: usuarioEmp, creado: empCreado } = await createUsuario(
-    "empleado@highlife.com", "empleado123", rolEmpleado.id
-  );
-  if (empCreado) {
-    const empExiste = await prisma.empleado.findFirst({ where: { correo: "empleado@highlife.com" } });
-    if (!empExiste) {
-      await prisma.empleado.create({
-        data: {
-          nombre: "Empleado", apellido: "Demo",
-          correo: "empleado@highlife.com",
-          especialidad: "Estilista",
-          estado: "Activo",
-          usuarioId: usuarioEmp.id,
-        },
-      });
+  // 3. Un empleado de prueba por cada especialidad
+  const empleadosDemoData = [
+    { especialidad: "Manicurista",  correo: "manicurista@highlife.com",  contrasena: "manicurista123"  },
+    { especialidad: "Estilista",    correo: "estilista@highlife.com",    contrasena: "estilista123"    },
+    { especialidad: "Barbero",      correo: "barbero@highlife.com",      contrasena: "barbero123"      },
+    { especialidad: "Masajista",    correo: "masajista@highlife.com",    contrasena: "masajista123"    },
+    { especialidad: "Cosmetóloga",  correo: "cosmetologa@highlife.com",  contrasena: "cosmetologa123"  },
+  ];
+
+  for (const demo of empleadosDemoData) {
+    const rol = rolesEmp.find(r => r.nombre === demo.especialidad);
+    const { usuario, creado } = await createUsuario(demo.correo, demo.contrasena, rol.id);
+
+    if (creado) {
+      const empExiste = await prisma.empleado.findFirst({ where: { correo: demo.correo } });
+      if (!empExiste) {
+        await prisma.empleado.create({
+          data: {
+            nombre:       demo.especialidad,
+            apellido:     "Demo",
+            correo:       demo.correo,
+            especialidad: demo.especialidad,
+            estado:       "Activo",
+            usuarioId:    usuario.id,
+          },
+        });
+      }
+      console.log(`✔ Usuario ${demo.especialidad} creado`);
+    } else {
+      console.log(`– Usuario ${demo.especialidad} ya existe`);
     }
-    console.log("Usuario empleado creado");
-  } else {
-    console.log("Usuario empleado ya existe");
   }
 
   // 4. Cliente
@@ -67,26 +82,31 @@ async function seed() {
     if (!cliExiste) {
       await prisma.cliente.create({
         data: {
-          nombre: "Cliente", apellido: "Demo",
-          correo: "cliente@highlife.com",
+          nombre:      "Cliente",
+          apellido:    "Demo",
+          correo:      "cliente@highlife.com",
           foto_perfil: "",
-          estado: "Activo",
-          usuarioId: usuarioCli.id,
+          estado:      "Activo",
+          usuarioId:   usuarioCli.id,
         },
       });
     }
-    console.log("Usuario cliente creado");
+    console.log("✔ Usuario cliente creado");
   } else {
-    console.log("Usuario cliente ya existe");
+    console.log("– Usuario cliente ya existe");
   }
 
   // Resumen
-  console.log("\n─────────────────────────────────────────────────");
-  console.log("  Admin     admin@highlife.com    / admin123");
-  console.log("  Empleado  empleado@highlife.com / empleado123");
-  console.log("  Cliente   cliente@highlife.com  / cliente123");
-  console.log("─────────────────────────────────────────────────");
-  console.log("Cambia las contrasenas despues del primer login\n");
+  console.log("\n──────────────────────────────────────────────────────────────────");
+  console.log("  Admin        admin@highlife.com          / admin123");
+  console.log("  Manicurista  manicurista@highlife.com    / manicurista123");
+  console.log("  Estilista    estilista@highlife.com      / estilista123");
+  console.log("  Barbero      barbero@highlife.com        / barbero123");
+  console.log("  Masajista    masajista@highlife.com      / masajista123");
+  console.log("  Cosmetóloga  cosmetologa@highlife.com    / cosmetologa123");
+  console.log("  Cliente      cliente@highlife.com        / cliente123");
+  console.log("──────────────────────────────────────────────────────────────────");
+  console.log("Cambia las contraseñas después del primer login\n");
 
   await prisma.$disconnect();
 }
