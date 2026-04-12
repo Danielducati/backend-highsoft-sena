@@ -101,10 +101,62 @@ const getAvailableAppointments = async () => {
   }));
 };
 
-const create = async ({ tipo, clienteId, citaId, servicios, descuento, metodoPago }) => {
+const create = async ({ tipo, clienteId, citaId, servicios, descuento, metodoPago, clienteOcasional }) => {
   return prisma.$transaction(async (tx) => {
     let resolvedClienteId = clienteId ? Number(clienteId) : null;
     let items = servicios ?? [];
+
+    // Si viene cliente ocasional y no hay clienteId, crear cliente temporal
+    if (!resolvedClienteId && clienteOcasional?.firstName) {
+      const { firstName, lastName, documentType, document, email, phone } = clienteOcasional;
+
+      // Buscar si ya existe por documento
+      if (documentType && document) {
+        const existeDoc = await tx.cliente.findFirst({
+          where: { tipo_documento: documentType, numero_documento: document },
+        });
+        if (existeDoc) {
+          resolvedClienteId = existeDoc.PK_id_cliente;
+        }
+      }
+
+      // Buscar si ya existe por correo
+      if (!resolvedClienteId && email) {
+        const existeCorreo = await tx.cliente.findFirst({ where: { correo: email } });
+        if (existeCorreo) resolvedClienteId = existeCorreo.PK_id_cliente;
+      }
+
+      // Crear cliente temporal si no existe
+      if (!resolvedClienteId) {
+        const bcrypt = require("bcryptjs");
+        const passBase = document || "cliente123";
+        const hashed  = await bcrypt.hash(passBase, 10);
+
+        const usuario = await tx.usuario.create({
+          data: {
+            correo:     email || `ocasional_${Date.now()}@highlife.com`,
+            contrasena: hashed,
+            estado:     "Activo",
+            rolId:      3,
+          },
+        });
+
+        const cliente = await tx.cliente.create({
+          data: {
+            nombre:           firstName,
+            apellido:         lastName     || "",
+            tipo_documento:   documentType || null,
+            numero_documento: document     || null,
+            correo:           email        || null,
+            telefono:         phone        || null,
+            foto_perfil:      "",
+            Estado:           "Activo",
+            fk_id_usuario:    usuario.id,
+          },
+        });
+        resolvedClienteId = cliente.PK_id_cliente;
+      }
+    }
 
     if (tipo === "cita" && citaId) {
       const detalles = await tx.agendamientoDetalle.findMany({

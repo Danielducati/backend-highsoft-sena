@@ -133,6 +133,49 @@ const getStats = async (req, res) => {
       salesMap.get(key).servicios += 1;
     }
 
+    // Canceladas en el período
+    const citasCanceladas = await prisma.agendamientoCita.count({
+      where: {
+        fecha: { gte: desde },
+        estado: { in: ["Cancelada", "cancelled"] }
+      }
+    });
+
+    // Próximas 10 citas — desde ahora, combinando fecha + horario
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const upcomingRaw = await prisma.agendamientoCita.findMany({
+      where: {
+        fecha: { gte: hoy },
+        estado: { notIn: ["Cancelada", "Completada"] }
+      },
+      orderBy: [{ fecha: "asc" }, { horario: "asc" }],
+      take: 50, // traemos más para filtrar por hora luego
+      include: {
+        cliente: { select: { nombre: true, apellido: true } },
+        detalles: {
+          take: 1,
+          include: { empleado: { select: { nombre: true, apellido: true } } }
+        }
+      }
+    });
+
+    const ahora = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const hoyStr = `${ahora.getFullYear()}-${pad(ahora.getMonth()+1)}-${pad(ahora.getDate())}`;
+
+    // Comparar solo por fecha (sin hora) para evitar problemas de zona horaria
+    const upcomingFiltradas = upcomingRaw.filter(c => {
+      const fd = new Date(c.fecha);
+      // Usar UTC para la fecha de la cita ya que SQL Server la guarda en UTC
+      const fechaStr = `${fd.getUTCFullYear()}-${pad(fd.getUTCMonth()+1)}-${pad(fd.getUTCDate())}`;
+      return fechaStr >= hoyStr;
+    }).slice(0, 5);
+
+    // Clientes nuevos del período — la tabla no tiene createdAt, se omite
+    const clientesNuevos = 0;
+
     const detalles = await prisma.agendamientoDetalle.findMany({
       where: {
         cita: {
@@ -180,7 +223,39 @@ const getStats = async (req, res) => {
 
       servicesData: [...servMap.values()]
         .sort((a, b) => b.value - a.value)
-        .slice(0, 5)
+        .slice(0, 5),
+
+      cancelRate: {
+        total: citasActuales,
+        cancelled: citasCanceladas,
+        rate: citasActuales > 0
+          ? `${((citasCanceladas / citasActuales) * 100).toFixed(1)}%`
+          : "0%"
+      },
+
+      upcomingAppointments: upcomingFiltradas.map(c => {
+        const pad = n => String(n).padStart(2, "0");
+        const fd = new Date(c.fecha);
+        const fechaFormateada = `${fd.getUTCFullYear()}-${pad(fd.getUTCMonth()+1)}-${pad(fd.getUTCDate())}`;
+        const horaFormateada = c.horario
+          ? new Date(c.horario).toLocaleTimeString("es-CO", {
+              hour: "2-digit", minute: "2-digit", hour12: false,
+              timeZone: "America/Bogota"
+            })
+          : "—";
+        return {
+          id: c.id,
+          fecha: fechaFormateada,
+          hora: horaFormateada,
+          clienteName: c.cliente ? `${c.cliente.nombre} ${c.cliente.apellido}` : "—",
+          employeeName: c.detalles?.[0]?.empleado
+            ? `${c.detalles[0].empleado.nombre} ${c.detalles[0].empleado.apellido}`
+            : "—",
+          estado: c.estado,
+        };
+      }),
+
+      clientesNuevos
     });
 
   } catch (err) {

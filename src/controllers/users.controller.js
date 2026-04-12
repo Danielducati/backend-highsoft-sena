@@ -32,9 +32,12 @@ try {
 
 const createUser = async (req, res) => {
 try {
-    const { firstName, lastName, email, role } = req.body;
+    const { firstName, lastName, email, role, contrasena } = req.body;
     if (!firstName || !lastName || !email || !role)
     return res.status(400).json({ error: "Nombre, apellido, email y rol son requeridos" });
+
+    if (contrasena && contrasena.trim().length < 6)
+    return res.status(400).json({ error: "La contraseña debe tener mínimo 6 caracteres" });
 
     const result = await usersModel.create(req.body);
     res.status(201).json(result);

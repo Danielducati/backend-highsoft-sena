@@ -30,7 +30,16 @@ function formatEmployee(emp, idx = 0) {
 // ── Queries ───────────────────────────────────────────────────────────────────
 const getAll = async ({ soloActivos = true } = {}) => {
   const empleados = await prisma.empleado.findMany({
-    where:   soloActivos ? { estado: "Activo" } : {},
+    where: {
+      ...(soloActivos ? { estado: "Activo" } : {}),
+      // Solo empleados cuyo usuario NO sea Admin ni Cliente
+      usuario: {
+        rol: {
+          nombre: { notIn: ["Admin", "Administrador", "Cliente"] },
+        },
+      },
+    },
+    include: { usuario: { include: { rol: true } } },
     orderBy: { nombre: "asc" },
   });
   return empleados.map(formatEmployee);
@@ -44,7 +53,45 @@ const getById = async (id) => {
 const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo,
                         telefono, ciudad, especialidad, direccion, fotoPerfil,
                         contrasena, idRol }) => {
-  const hashed = await bcrypt.hash(contrasena || "empleado123", 10);
+  const passwordBase = contrasena?.trim() || numeroDocumento || "empleado123";
+  const hashed = await bcrypt.hash(passwordBase, 10);
+
+  // Si no se pasa idRol, buscar el rol "Empleado" por nombre
+  let rolId = idRol;
+  if (!rolId) {
+    const rolEmpleado = await prisma.rol.findFirst({
+      where: { nombre: { in: ["Empleado", "empleado"] } },
+    });
+    if (!rolEmpleado) throw new Error("No se encontró el rol 'Empleado' en la base de datos");
+    rolId = rolEmpleado.id;
+  }
+
+  // Verificar que el rol existe
+  const rolExiste = await prisma.rol.findUnique({ where: { id: Number(rolId) } });
+  if (!rolExiste) {
+    // Fallback: usar el rol Empleado por nombre
+    const rolEmpleado = await prisma.rol.findFirst({
+      where: { nombre: { in: ["Empleado", "empleado"] } },
+    });
+    if (!rolEmpleado) throw new Error("No se encontró el rol 'Empleado' en la base de datos");
+    rolId = rolEmpleado.id;
+  }
+
+  // Documento duplicado
+  if (tipoDocumento && numeroDocumento) {
+    const existeDoc = await prisma.empleado.findFirst({
+      where: { tipoDocumento, numeroDocumento },
+    });
+    if (existeDoc) {
+      throw new Error(`Ya existe un empleado con ${tipoDocumento} ${numeroDocumento}`);
+    }
+  }
+
+  // Correo duplicado
+  const existeCorreo = await prisma.usuario.findUnique({ where: { correo } });
+  if (existeCorreo) {
+    throw new Error(`Ya existe un usuario registrado con el correo ${correo}`);
+  }
 
   // Transacción: crear Usuario + Empleado
   return prisma.$transaction(async (tx) => {
@@ -53,7 +100,7 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
         correo,
         contrasena: hashed,
         estado:     "Activo",
-        rolId:      idRol ?? 2,
+        rolId:      Number(rolId),
       },
     });
     const empleado = await tx.empleado.create({
@@ -76,13 +123,29 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
 };
 
 const update = async (id, data) => {
+  const empId = Number(id);
+
+  // Documento duplicado en otro empleado
+  if (data.tipoDocumento && data.numeroDocumento) {
+    const existeDoc = await prisma.empleado.findFirst({
+      where: {
+        tipoDocumento:   data.tipoDocumento,
+        numeroDocumento: data.numeroDocumento,
+        NOT: { id: empId },
+      },
+    });
+    if (existeDoc) {
+      throw new Error(`Ya existe un empleado con ${data.tipoDocumento} ${data.numeroDocumento}`);
+    }
+  }
+
   const updateData = {};
 
   if (data.nombre          !== undefined) updateData.nombre          = data.nombre;
   if (data.apellido        !== undefined) updateData.apellido        = data.apellido;
   if (data.tipoDocumento   !== undefined) updateData.tipoDocumento   = data.tipoDocumento;
   if (data.numeroDocumento !== undefined) updateData.numeroDocumento = data.numeroDocumento;
-  if (data.correo          !== undefined) updateData.correo          = data.correo;
+  // correo no se actualiza aquí para mantener consistencia con la tabla Usuarios
   if (data.telefono        !== undefined) updateData.telefono        = data.telefono;
   if (data.ciudad          !== undefined) updateData.ciudad          = data.ciudad;
   if (data.especialidad    !== undefined) updateData.especialidad    = data.especialidad;
@@ -91,7 +154,7 @@ const update = async (id, data) => {
   if (data.estado          !== undefined) updateData.estado          = data.estado;
 
   const emp = await prisma.empleado.update({
-    where: { id: Number(id) },
+    where: { id: empId },
     data:  updateData,
   });
 
