@@ -217,7 +217,26 @@ const remove = async (id) => {
       await tx.empleado.delete({ where: { id: empleado.id } });
     }
 
-    await tx.cliente.deleteMany({ where: { fk_id_usuario: Number(id) } });
+    // Limpiar relaciones del cliente antes de borrarlo
+    const cliente = await tx.cliente.findFirst({ where: { fk_id_usuario: Number(id) } });
+    if (cliente) {
+      // Desasociar citas (poner clienteId en null)
+      await tx.agendamientoCita.updateMany({
+        where: { clienteId: cliente.PK_id_cliente },
+        data:  { clienteId: null },
+      });
+      // Desasociar cotizaciones
+      await tx.cotizacion.updateMany({
+        where: { clienteId: cliente.PK_id_cliente },
+        data:  { clienteId: null },
+      });
+      // Desasociar ventas
+      await tx.venta.updateMany({
+        where: { FK_id_cliente: cliente.PK_id_cliente },
+        data:  { FK_id_cliente: null },
+      });
+      await tx.cliente.delete({ where: { PK_id_cliente: cliente.PK_id_cliente } });
+    }
     await tx.resetPasswordToken.deleteMany({ where: { usuarioId: Number(id) } });
     await tx.usuario.delete({ where: { id: Number(id) } });
     return { ok: true };
