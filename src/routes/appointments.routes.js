@@ -6,7 +6,8 @@ const { verificarToken, hasPermission } = require("../middlewares/auth.middlewar
 // Rutas para clientes: ver y crear sus propias citas (sin requerir permisos de rol)
 router.get("/mis-citas",              verificarToken, ctrl.getAll);
 router.post("/mis-citas",             verificarToken, ctrl.create);
-router.post("/mis-citas/:id/cancel", verificarToken, ctrl.cancelMiCita);
+router.put("/mis-citas/:id",          verificarToken, ctrl.update);
+router.post("/mis-citas/:id/cancel",  verificarToken, ctrl.cancelMiCita);
 
 router.get("/",             verificarToken, hasPermission("citas.ver"),      ctrl.getAll);
 router.get("/:id",          verificarToken, hasPermission("citas.ver"),      ctrl.getOne);
