@@ -89,24 +89,21 @@ const remove = async (req, res) => {
     if (!id || isNaN(id))
       return res.status(400).json({ error: "ID inválido" });
 
-    // Verificar asociaciones
-    const [citas, cotizaciones, ventas] = await Promise.all([
-      prisma.agendamientoCita.count({ where: { clienteId: id } }),
-      prisma.cotizacion.count({ where: { clienteId: id } }),
-      prisma.venta.count({ where: { FK_id_cliente: id } }),
-    ]);
-
-    console.log("Asociaciones cliente", id, ":", { citas, cotizaciones, ventas });
-
-    const total = citas + cotizaciones + ventas;
-
-    if (total > 0)
-      return res.status(400).json({
-        error: `No se puede eliminar. El cliente tiene ${total} registro(s) asociado(s)`,
-      });
-
     const cliente = await prisma.cliente.findUnique({ where: { PK_id_cliente: id } });
     await prisma.$transaction(async (tx) => {
+      // Desasociar relaciones antes de borrar
+      await tx.agendamientoCita.updateMany({
+        where: { clienteId: id },
+        data:  { clienteId: null },
+      });
+      await tx.cotizacion.updateMany({
+        where: { clienteId: id },
+        data:  { clienteId: null },
+      });
+      await tx.venta.updateMany({
+        where: { FK_id_cliente: id },
+        data:  { FK_id_cliente: null },
+      });
       await tx.cliente.delete({ where: { PK_id_cliente: id } });
       if (cliente?.fk_id_usuario) {
         await tx.resetPasswordToken.deleteMany({ where: { usuarioId: cliente.fk_id_usuario } });
