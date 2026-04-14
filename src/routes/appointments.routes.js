@@ -4,10 +4,14 @@ const ctrl    = require("../controllers/appointments.controller");
 const { verificarToken, hasPermission } = require("../middlewares/auth.middleware");
 
 // Rutas para clientes: ver y crear sus propias citas (sin requerir permisos de rol)
-router.get("/mis-citas",              verificarToken, ctrl.getAll);
-router.post("/mis-citas",             verificarToken, ctrl.create);
-router.put("/mis-citas/:id",          verificarToken, ctrl.update);
-router.post("/mis-citas/:id/cancel",  verificarToken, ctrl.cancelMiCita);
+router.get("/mis-citas",                    verificarToken, ctrl.getAll);
+router.post("/mis-citas",                   verificarToken, ctrl.create);
+router.put("/mis-citas/:id",                verificarToken, ctrl.update);
+router.post("/mis-citas/:id/cancel",        verificarToken, ctrl.cancelMiCita);
+
+// Rutas para empleados: ver y crear citas propias
+router.get("/mis-citas-empleado",           verificarToken, ctrl.getAll);
+router.post("/mis-citas-empleado",          verificarToken, ctrl.create);
 
 router.get("/",             verificarToken, hasPermission("citas.ver"),      ctrl.getAll);
 router.get("/:id",          verificarToken, hasPermission("citas.ver"),      ctrl.getOne);

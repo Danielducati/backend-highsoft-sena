@@ -145,6 +145,28 @@ const create = async (req, res) => {
       )
     ];
 
+    // Validar que cada empleado tiene horario registrado en esa fecha
+    if (empleadoIds.length > 0) {
+      const [y, m, d] = fecha.split("-").map(Number);
+      const fechaLocal = new Date(Date.UTC(y, m - 1, d));
+
+      for (const empId of empleadoIds) {
+        const horario = await prisma.horario.findFirst({
+          where: { empleadoId: empId, fecha: fechaLocal },
+        });
+        if (!horario) {
+          const emp = await prisma.empleado.findUnique({
+            where: { id: empId },
+            select: { nombre: true, apellido: true },
+          });
+          const nombre = emp ? `${emp.nombre} ${emp.apellido}` : `Empleado #${empId}`;
+          return res.status(400).json({
+            error: `${nombre} no tiene horario registrado para el ${fecha}`,
+          });
+        }
+      }
+    }
+
     console.log("Empleados a validar:", empleadoIds);
 
     if (empleadoIds.length > 0) {
@@ -182,7 +204,7 @@ const create = async (req, res) => {
         // Citas existentes del empleado en esa fecha
         const citasEmpleado = await prisma.agendamientoCita.findMany({
           where: {
-            fecha:  new Date(fecha),
+            fecha:  new Date(fecha + "T00:00:00.000Z"),
             estado: { not: "Cancelada" },
             detalles: {
               some: { empleadoId: empId }
@@ -224,9 +246,62 @@ const create = async (req, res) => {
 
         }
 
-      }
+        // ── Validar novedades del empleado ──────────────────────────────────
+        const horariosConNovedad = await prisma.horario.findMany({
+          where: {
+            empleadoId: empId,
+            fecha:      new Date(fecha + "T00:00:00.000Z"),
+            novedades: {
+              some: {
+                estado: "Activo",
+                OR: [
+                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: { gte: new Date(fecha + "T00:00:00.000Z") } },
+                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: null },
+                ],
+              },
+            },
+          },
+          include: {
+            novedades: {
+              where: {
+                estado: "Activo",
+                OR: [
+                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: { gte: new Date(fecha + "T00:00:00.000Z") } },
+                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: null },
+                ],
+              },
+            },
+          },
+        });
 
-    }
+        for (const horario of horariosConNovedad) {
+          for (const novedad of horario.novedades) {
+            if (novedad.horaInicio && novedad.horaFinal) {
+              const hi = new Date(novedad.horaInicio);
+              const hf = new Date(novedad.horaFinal);
+              const novedadInicio = new Date(
+                `1970-01-01T${String(hi.getHours()).padStart(2,"0")}:${String(hi.getMinutes()).padStart(2,"0")}:00`
+              );
+              const novedadFin = new Date(
+                `1970-01-01T${String(hf.getHours()).padStart(2,"0")}:${String(hf.getMinutes()).padStart(2,"0")}:00`
+              );
+              if (nuevaInicio < novedadFin && nuevaFin > novedadInicio) {
+                return res.status(400).json({
+                  error: `El empleado tiene una novedad (${novedad.tipoNovedad ?? "ausencia"}) que impide agendar en ese horario`,
+                });
+              }
+            } else {
+              // Sin rango horario → bloquea todo el día
+              return res.status(400).json({
+                error: `El empleado no está disponible ese día por una novedad registrada (${novedad.tipoNovedad ?? "ausencia"})`,
+              });
+            }
+          }
+        }
+
+      } // end for empId
+
+    } // end if empleadoIds
 
     const id = await appointmentsModel.create({
       cliente,

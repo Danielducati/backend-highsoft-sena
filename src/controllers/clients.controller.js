@@ -93,24 +93,21 @@ const remove = async (req, res) => {
     if (!id || isNaN(id))
       return res.status(400).json({ error: "ID inválido" });
 
-    // Verificar asociaciones
-    const [citas, cotizaciones, ventas] = await Promise.all([
-      prisma.agendamientoCita.count({ where: { clienteId: id } }),
-      prisma.cotizacion.count({ where: { clienteId: id } }),
-      prisma.venta.count({ where: { FK_id_cliente: id } }),
-    ]);
-
-    console.log("Asociaciones cliente", id, ":", { citas, cotizaciones, ventas });
-
-    const total = citas + cotizaciones + ventas;
-
-    if (total > 0)
-      return res.status(400).json({
-        error: `No se puede eliminar. El cliente tiene ${total} registro(s) asociado(s)`,
-      });
-
     const cliente = await prisma.cliente.findUnique({ where: { PK_id_cliente: id } });
     await prisma.$transaction(async (tx) => {
+      // Desasociar relaciones antes de borrar
+      await tx.agendamientoCita.updateMany({
+        where: { clienteId: id },
+        data:  { clienteId: null },
+      });
+      await tx.cotizacion.updateMany({
+        where: { clienteId: id },
+        data:  { clienteId: null },
+      });
+      await tx.venta.updateMany({
+        where: { FK_id_cliente: id },
+        data:  { FK_id_cliente: null },
+      });
       await tx.cliente.delete({ where: { PK_id_cliente: id } });
       if (cliente?.fk_id_usuario) {
         await tx.resetPasswordToken.deleteMany({ where: { usuarioId: cliente.fk_id_usuario } });
@@ -126,4 +123,30 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getMiPerfil, getOne, create, update, setStatus, remove };
+// Lista ligera de clientes activos para uso en citas/cotizaciones (sin permiso clientes.ver)
+const getParaCitas = async (req, res) => {
+  try {
+    const clientes = await prisma.cliente.findMany({
+      where: { Estado: "Activo" },
+      select: {
+        PK_id_cliente: true,
+        nombre:        true,
+        apellido:      true,
+        correo:        true,
+        telefono:      true,
+      },
+      orderBy: { nombre: "asc" },
+    });
+    res.json(clientes.map(c => ({
+      id:       c.PK_id_cliente,
+      nombre:   c.nombre,
+      apellido: c.apellido,
+      name:     `${c.nombre} ${c.apellido}`.trim(),
+      correo:   c.correo   ?? "",
+      telefono: c.telefono ?? "",
+      phone:    c.telefono ?? "",
+    })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};
+
+module.exports = { getAll, getMiPerfil, getParaCitas, getOne, create, update, setStatus, remove };
