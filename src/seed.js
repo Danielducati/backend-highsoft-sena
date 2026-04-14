@@ -82,12 +82,14 @@ async function seed() {
     if (!cliExiste) {
       await prisma.cliente.create({
         data: {
-          nombre:      "Cliente",
-          apellido:    "Demo",
-          correo:      "cliente@highlife.com",
-          foto_perfil: "",
-          estado:      "Activo",
-          usuarioId:   usuarioCli.id,
+          nombre:    "Cliente",
+          apellido:  "Demo",
+          correo:    "cliente@highlife.com",
+          fotoPerfil: "",
+          Estado:    "Activo",
+          Usuarios: {
+            connect: { id: usuarioCli.id }
+          },
         },
       });
     }
