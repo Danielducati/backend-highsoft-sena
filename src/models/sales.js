@@ -160,12 +160,13 @@ const create = async ({ tipo, clienteId, citaId, servicios, descuento, metodoPag
 
     if (tipo === "cita" && citaId) {
       const detalles = await tx.agendamientoDetalle.findMany({
-        where: { citaId: Number(citaId) },
+        where:   { citaId: Number(citaId) },
+        include: { servicio: true },
       });
       items = detalles.map(d => ({
-        id: d.servicioId,
-        precio: d.precio ?? 0,
-        qty: 1,
+        id:         d.servicioId,
+        precio:     d.precio !== null ? Number(d.precio) : Number(d.servicio?.precio ?? 0),
+        qty:        1,
         empleadoId: d.empleadoId ?? null,
       }));
 
@@ -176,15 +177,14 @@ const create = async ({ tipo, clienteId, citaId, servicios, descuento, metodoPag
     }
 
     const subtotal = items.reduce((s, i) => s + Number(i.precio ?? 0) * (i.qty ?? 1), 0);
-    const iva      = subtotal * 0.19;
-    const total    = subtotal + iva - Number(descuento ?? 0);
+    const total    = subtotal - Number(descuento ?? 0);
 
     const venta = await tx.venta.create({
       data: {
         FK_id_cliente: resolvedClienteId,
         FK_id_cita:    citaId ? Number(citaId) : null,
         Fecha:         new Date(),
-        Iva:           iva,
+        Iva:           0,
         descuento:     descuento ?? 0,
         Total:         total,
         metodo_pago:   metodoPago ?? null,

@@ -123,4 +123,30 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getMiPerfil, getOne, create, update, setStatus, remove };
+// Lista ligera de clientes activos para uso en citas/cotizaciones (sin permiso clientes.ver)
+const getParaCitas = async (req, res) => {
+  try {
+    const clientes = await prisma.cliente.findMany({
+      where: { Estado: "Activo" },
+      select: {
+        PK_id_cliente: true,
+        nombre:        true,
+        apellido:      true,
+        correo:        true,
+        telefono:      true,
+      },
+      orderBy: { nombre: "asc" },
+    });
+    res.json(clientes.map(c => ({
+      id:       c.PK_id_cliente,
+      nombre:   c.nombre,
+      apellido: c.apellido,
+      name:     `${c.nombre} ${c.apellido}`.trim(),
+      correo:   c.correo   ?? "",
+      telefono: c.telefono ?? "",
+      phone:    c.telefono ?? "",
+    })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};
+
+module.exports = { getAll, getMiPerfil, getParaCitas, getOne, create, update, setStatus, remove };
