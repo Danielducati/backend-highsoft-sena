@@ -61,7 +61,11 @@ const getById = async (id) => {
 
 const getAvailableAppointments = async () => {
   const citas = await prisma.agendamientoCita.findMany({
-    where:   { estado: { in: ["Pendiente", "Confirmada", "Confirmado"] } },
+    where: {
+      estado: { in: ["Pendiente", "Confirmada", "Confirmado"] },
+      // Solo citas que NO tienen venta asociada
+      Venta: { none: {} },
+    },
     include: {
       cliente:  true,
       detalles: { include: { servicio: true, empleado: true } }, // ✅ agrega empleado
