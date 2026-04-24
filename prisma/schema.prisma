@@ -46,6 +46,7 @@ model Usuario {
   rolId                Int                   @map("FK_id_rol")
   Cliente              Cliente[]
   empleado             Empleado[]
+  horarioChanges       HorarioHistorial[]
   rol                  Rol                   @relation(fields: [rolId], references: [id], onUpdate: NoAction, map: "FK_Usuarios_Rol")
   foto_perfil          String?
   resetPasswordTokens ResetPasswordToken[]
@@ -81,6 +82,7 @@ model Empleado {
   usuario           Usuario            @relation(fields: [usuarioId], references: [id], onUpdate: NoAction, map: "FK_Empleado_Usuario")
   empleadoServicios    EmpleadoServicio[]
   horarios             Horario[]
+  horarioHistorial     HorarioHistorial[]
   agendamientoDetalles AgendamientoDetalle[]
   ventaDetalles       VentaDetalle[]
 
@@ -276,4 +278,26 @@ model Venta {
   Venta_detalle          VentaDetalle[]
 
   @@map("Venta")
+}
+
+model HorarioHistorial {
+  id                Int       @id @default(autoincrement()) @map("PK_id_horario_historial")
+  empleadoId        Int       @map("FK_id_empleado")
+  weekStartDate     DateTime  @map("week_start_date") @db.Date
+  versionNumber     Int       @map("version_number") @default(1)
+  changeReason      String?   @map("change_reason") @db.VarChar(500)
+  changedBy         Int?      @map("changed_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  
+  // Snapshot de los horarios en formato JSON
+  scheduleSnapshot  String    @map("schedule_snapshot") @db.Text
+  
+  // Relaciones
+  empleado          Empleado  @relation(fields: [empleadoId], references: [id], onUpdate: NoAction)
+  usuario           Usuario?  @relation(fields: [changedBy], references: [id], onUpdate: NoAction)
+  
+  @@unique([empleadoId, weekStartDate, versionNumber])
+  @@index([empleadoId, weekStartDate])
+  @@index([createdAt])
+  @@map("Horario_Historial")
 }

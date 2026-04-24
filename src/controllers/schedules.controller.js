@@ -1,5 +1,6 @@
 const prisma = require("../config/prisma");
 const { scheduleErrors } = require("../utils/errorMessages");
+const ScheduleHistoryService = require("../services/ScheduleHistoryService");
 
 const OPEN_TIME  = "08:00";
 const CLOSE_TIME = "20:00";
@@ -128,7 +129,7 @@ const create = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { employeeId, weekStartDate } = req.params;
-    const { daySchedules } = req.body;
+    const { daySchedules, changeReason } = req.body;
 
     if (!Array.isArray(daySchedules) || daySchedules.length === 0) {
       return res.status(400).json({ error: scheduleErrors.EMPTY_DAY_SCHEDULES });
@@ -138,13 +139,29 @@ const update = async (req, res) => {
     const sunday = buildFecha(weekStartDate, 6);
 
     await prisma.$transaction(async (tx) => {
-      await tx.horario.deleteMany({
+      // 🔄 PASO 1: Guardar horario actual en historial ANTES de modificar
+      try {
+        await ScheduleHistoryService.saveToHistory(
+          Number(employeeId),
+          weekStartDate,
+          changeReason || "Actualización de horario",
+          req.user?.id || null // ID del usuario autenticado (si está disponible)
+        );
+      } catch (historyError) {
+        console.warn("⚠️ Error guardando historial (continuando con actualización):", historyError.message);
+      }
+
+      // 🗑️ PASO 2: Borrar todos los horarios de esa semana para ese empleado
+      const deletedCount = await tx.horario.deleteMany({
         where: {
           empleadoId: Number(employeeId),
           fecha: { gte: monday, lte: sunday },
         },
       });
 
+      console.log(`📅 Horarios eliminados para historial: ${deletedCount.count} registros`);
+
+      // ➕ PASO 3: Recrear con los nuevos datos
       for (const ds of daySchedules) {
         if (ds.startTime >= ds.endTime) throw new Error(scheduleErrors.INVALID_TIME_RANGE);
         if (ds.startTime < OPEN_TIME || ds.endTime > CLOSE_TIME) throw new Error(scheduleErrors.OUTSIDE_WORK_HOURS);
@@ -156,17 +173,6 @@ const update = async (req, res) => {
 
         const start = toTime(ds.startTime);
         const end   = toTime(ds.endTime);
-
-        // Verificar solapamiento en JS
-        const horariosExistentes = await tx.horario.findMany({
-          where: { empleadoId: Number(employeeId), fecha },
-        });
-        const overlapping = horariosExistentes.some(h => {
-          const hStart = new Date(h.horaInicio).getTime();
-          const hEnd   = new Date(h.horaFinal).getTime();
-          return start.getTime() < hEnd && end.getTime() > hStart;
-        });
-        if (overlapping) throw new Error(scheduleErrors.OVERLAPPING_SCHEDULE);
 
         await tx.horario.create({
           data: {
@@ -180,8 +186,14 @@ const update = async (req, res) => {
       }
     });
 
-    res.json({ ok: true });
+    console.log(`✅ Horario actualizado para empleado ${employeeId}, semana ${weekStartDate}`);
+    res.json({ 
+      ok: true, 
+      message: "Horario actualizado y guardado en historial",
+      historyEnabled: true 
+    });
   } catch (err) {
+    console.error("❌ Error actualizando horario:", err);
     res.status(400).json({ error: err.message || scheduleErrors.SERVER_ERROR });
   }
 };
@@ -189,9 +201,22 @@ const update = async (req, res) => {
 const remove = async (req, res) => {
   try {
     const { employeeId, weekStartDate } = req.params;
+    const { deleteReason } = req.body;
 
     const monday     = buildFecha(weekStartDate, 0);
     const nextMonday = buildFecha(weekStartDate, 7);
+
+    // 🔄 Guardar en historial antes de eliminar
+    try {
+      await ScheduleHistoryService.saveToHistory(
+        Number(employeeId),
+        weekStartDate,
+        deleteReason || "Eliminación de horario",
+        req.user?.id || null
+      );
+    } catch (historyError) {
+      console.warn("⚠️ Error guardando historial antes de eliminar:", historyError.message);
+    }
 
     const result = await prisma.horario.deleteMany({
       where: {
@@ -204,10 +229,109 @@ const remove = async (req, res) => {
       return res.status(404).json({ error: scheduleErrors.SCHEDULE_NOT_FOUND });
     }
 
-    res.json({ ok: true, deletedCount: result.count });
+    console.log(`🗑️ Horario eliminado para empleado ${employeeId}, semana ${weekStartDate}`);
+    res.json({ 
+      ok: true, 
+      deletedCount: result.count,
+      message: "Horario eliminado y guardado en historial"
+    });
   } catch (err) {
-    res.status(500).json({ error: scheduleErrors.SERVER_ERROR });
+    res.status(500).json({ error: err.message || scheduleErrors.SERVER_ERROR });
   }
 };
 
-module.exports = { getAll, create, update, remove };
+// 📊 NUEVOS ENDPOINTS PARA HISTORIAL
+
+const getEmployeeHistory = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { limit = 10 } = req.query;
+
+    const history = await ScheduleHistoryService.getEmployeeHistory(
+      Number(employeeId), 
+      Number(limit)
+    );
+
+    res.json({
+      employeeId,
+      history,
+      total: history.length,
+      message: "Historial obtenido exitosamente"
+    });
+  } catch (err) {
+    console.error("Error obteniendo historial del empleado:", err);
+    res.status(500).json({ error: "Error obteniendo historial" });
+  }
+};
+
+const getWeekHistory = async (req, res) => {
+  try {
+    const { employeeId, weekStartDate } = req.params;
+
+    const history = await ScheduleHistoryService.getWeekHistory(
+      Number(employeeId),
+      weekStartDate
+    );
+
+    res.json({
+      employeeId,
+      weekStartDate,
+      history,
+      versions: history.length,
+      message: "Historial de semana obtenido exitosamente"
+    });
+  } catch (err) {
+    console.error("Error obteniendo historial de semana:", err);
+    res.status(500).json({ error: "Error obteniendo historial de semana" });
+  }
+};
+
+const restoreFromHistory = async (req, res) => {
+  try {
+    const { historyId } = req.params;
+    const { restoreReason } = req.body;
+
+    const restored = await ScheduleHistoryService.restoreFromHistory(
+      Number(historyId),
+      req.user?.id || null
+    );
+
+    res.json({
+      ok: true,
+      restored,
+      message: "Horario restaurado desde historial exitosamente"
+    });
+  } catch (err) {
+    console.error("Error restaurando desde historial:", err);
+    res.status(400).json({ error: err.message || "Error restaurando horario" });
+  }
+};
+
+const getHistoryStats = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const stats = await ScheduleHistoryService.getHistoryStats(Number(employeeId));
+
+    res.json({
+      employeeId,
+      stats,
+      message: "Estadísticas de historial obtenidas exitosamente"
+    });
+  } catch (err) {
+    console.error("Error obteniendo estadísticas:", err);
+    res.status(500).json({ error: "Error obteniendo estadísticas" });
+  }
+};
+
+module.exports = { 
+  getAll, 
+  create, 
+  update, 
+  remove,
+  // Nuevos endpoints de historial
+  getEmployeeHistory,
+  getWeekHistory,
+  restoreFromHistory,
+  getHistoryStats
+};

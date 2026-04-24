@@ -339,6 +339,23 @@ const update = async (req, res) => {
       });
     }
 
+    // Verificar que la cita no esté completada
+    const cita = await prisma.agendamientoCita.findUnique({
+      where: { id }
+    });
+
+    if (!cita) {
+      return res.status(404).json({
+        error: appointmentErrors.NOT_FOUND
+      });
+    }
+
+    if (cita.estado === "Completada") {
+      return res.status(400).json({
+        error: "No se puede editar una cita completada"
+      });
+    }
+
     await appointmentsModel.update(id, req.body);
 
     res.json({
@@ -373,6 +390,23 @@ const updateStatus = async (req, res) => {
       });
     }
 
+    // Verificar que la cita no esté completada (no se puede cambiar el estado de una cita completada)
+    const cita = await prisma.agendamientoCita.findUnique({
+      where: { id }
+    });
+
+    if (!cita) {
+      return res.status(404).json({
+        error: appointmentErrors.NOT_FOUND
+      });
+    }
+
+    if (cita.estado === "Completada") {
+      return res.status(400).json({
+        error: "No se puede cambiar el estado de una cita completada"
+      });
+    }
+
     await appointmentsModel.updateStatus(id, status);
 
     res.json({
@@ -397,6 +431,23 @@ const cancel = async (req, res) => {
     if (!id || isNaN(id)) {
       return res.status(400).json({
         error: appointmentErrors.INVALID_ID
+      });
+    }
+
+    // Verificar que la cita no esté completada
+    const cita = await prisma.agendamientoCita.findUnique({
+      where: { id }
+    });
+
+    if (!cita) {
+      return res.status(404).json({
+        error: appointmentErrors.NOT_FOUND
+      });
+    }
+
+    if (cita.estado === "Completada") {
+      return res.status(400).json({
+        error: "No se puede cancelar una cita completada"
       });
     }
 

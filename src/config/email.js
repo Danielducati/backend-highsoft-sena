@@ -1,21 +1,84 @@
 const nodemailer = require("nodemailer");
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Configuración principal con múltiples opciones de fallback
+const createTransporter = () => {
+  // Configuración principal (Gmail con IPv4 forzado)
+  const primaryConfig = {
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+    tls: {
+      rejectUnauthorized: false
+    },
+    // Forzar IPv4 para evitar problemas de conectividad IPv6
+    family: 4,
+    // Timeout más largo para conexiones lentas
+    connectionTimeout: 60000,
+    greetingTimeout: 30000,
+    socketTimeout: 60000
+  };
 
-// ✅ Verificar conexión
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ Error en configuración de email:", error);
-  } else {
-    console.log("✅ Email configurado correctamente");
+  // Configuración alternativa (puerto 465 con SSL)
+  const alternativeConfig = {
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+    tls: {
+      rejectUnauthorized: false
+    },
+    family: 4,
+    connectionTimeout: 60000,
+    greetingTimeout: 30000,
+    socketTimeout: 60000
+  };
+
+  // Intentar configuración principal primero
+  try {
+    return nodemailer.createTransport(primaryConfig);
+  } catch (error) {
+    console.warn("⚠️ Configuración principal falló, intentando alternativa...");
+    return nodemailer.createTransport(alternativeConfig);
   }
-});
+};
+
+const transporter = createTransporter();
+
+// ✅ Verificar conexión con reintentos
+const verifyConnection = async (retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await transporter.verify();
+      console.log("✅ Email configurado correctamente");
+      return true;
+    } catch (error) {
+      console.error(`❌ Intento ${i + 1}/${retries} - Error en configuración de email:`, error.message);
+      
+      if (i === retries - 1) {
+        console.error("❌ No se pudo establecer conexión con el servidor de email después de", retries, "intentos");
+        console.error("💡 Posibles soluciones:");
+        console.error("   1. Verificar que EMAIL_USER y EMAIL_PASSWORD estén configurados correctamente");
+        console.error("   2. Asegurarse de usar una 'App Password' de Gmail, no la contraseña normal");
+        console.error("   3. Verificar conectividad a internet");
+        console.error("   4. Revisar configuración de firewall/antivirus");
+        return false;
+      }
+      
+      // Esperar antes del siguiente intento
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+};
+
+// Verificar conexión al inicializar
+verifyConnection();
 
 // 📧 EMAIL DE BIENVENIDA
 const sendWelcomeEmail = async (to, name) => {
@@ -77,7 +140,7 @@ const sendWelcomeEmail = async (to, name) => {
     console.log("✅ Email de bienvenida enviado a:", to);
     return true;
   } catch (error) {
-    console.error("❌ Error enviando email de bienvenida:", error);
+    console.error("❌ Error enviando email de bienvenida:", error.message);
     return false;
   }
 };
@@ -140,7 +203,41 @@ const sendResetPasswordEmail = async (to, resetLink) => {
     console.log("✅ Email de recuperación enviado a:", to);
     return true;
   } catch (error) {
-    console.error("❌ Error enviando email de recuperación:", error);
+    console.error("❌ Error enviando email de recuperación:", error.message);
+    return false;
+  }
+};
+
+// 🧪 Función de prueba para verificar el envío de emails
+const testEmailConnection = async () => {
+  console.log("🧪 Probando conexión de email...");
+  
+  try {
+    await transporter.verify();
+    console.log("✅ Conexión de email verificada exitosamente");
+    
+    // Enviar email de prueba (opcional)
+    if (process.env.NODE_ENV === 'development') {
+      const testResult = await transporter.sendMail({
+        from: `"Highlife Spa Test" <${process.env.EMAIL_USER}>`,
+        to: process.env.EMAIL_USER, // Enviar a sí mismo
+        subject: "🧪 Test de configuración de email",
+        text: "Si recibes este email, la configuración está funcionando correctamente.",
+        html: `
+          <div style="padding: 20px; font-family: Arial, sans-serif;">
+            <h2 style="color: #78D1BD;">🧪 Test de Email</h2>
+            <p>Si recibes este email, la configuración está funcionando correctamente.</p>
+            <p><strong>Fecha:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+        `
+      });
+      
+      console.log("✅ Email de prueba enviado:", testResult.messageId);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("❌ Error en test de email:", error.message);
     return false;
   }
 };
@@ -148,4 +245,6 @@ const sendResetPasswordEmail = async (to, resetLink) => {
 module.exports = {
   sendWelcomeEmail,
   sendResetPasswordEmail,
+  testEmailConnection,
+  verifyConnection
 };
