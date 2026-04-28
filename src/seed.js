@@ -92,16 +92,16 @@ async function seed() {
     let cliente = await prisma.cliente.findFirst({ where: { correo: cli.correo } });
     if (!cliente) {
       cliente = await prisma.cliente.create({
-        data: {
-          nombre:     cli.nombre,
-          apellido:   cli.apellido,
-          correo:     cli.correo,
-          telefono:   "3109876543",
-          fotoPerfil: "",
-          Estado:     "Activo",
-          Usuarios: { connect: { id: usuarioCli.id } },
-        },
-      });
+      data: {
+        nombre:      cli.nombre,
+        apellido:    cli.apellido,
+        correo:      cli.correo,
+        telefono:    "3109876543",
+        foto_perfil: "",           // ← cambiado
+        Estado:      "Activo",
+        Usuarios: { connect: { id: usuarioCli.id } },
+      },
+    });
     }
     clientesCreados.push(cliente);
     console.log(cliCreado ? `✔ Cliente ${cli.nombre} creado` : `– Cliente ${cli.nombre} ya existe`);

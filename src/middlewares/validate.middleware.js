@@ -112,18 +112,12 @@ const validateCreateRole = (req, res, next) => {
 };
 
 const validateUpdateRole = (req, res, next) => {
-  const { nombre, descripcion, permisosIds } = req.body;
+  const { nombre, permisosIds } = req.body;
   if (nombre !== undefined) {
     if (!nombre.trim())
       return error(res, "El nombre del rol no puede estar vacío");
     if (nombre.trim().length < 3 || nombre.trim().length > 100)
       return error(res, "El nombre debe tener entre 3 y 100 caracteres");
-  }
-  if (descripcion !== undefined) {
-    if (!descripcion.trim())
-      return error(res, "La descripción no puede estar vacía");
-    if (descripcion.trim().length < 10)
-      return error(res, "La descripción debe tener al menos 10 caracteres");
   }
   if (permisosIds !== undefined) {
     if (!Array.isArray(permisosIds) || permisosIds.length === 0)

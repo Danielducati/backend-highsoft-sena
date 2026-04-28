@@ -10,15 +10,17 @@ function formatUser(u, cliente = null) {
   return {
     id:           u.id,
     email:        u.correo,
-    name:         perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : u.correo,
-    firstName:    perfil?.nombre           ?? "",
-    lastName:     perfil?.apellido         ?? "",
-    phone:        perfil?.telefono         ?? "",
-    documentType: perfil?.tipoDocumento    ?? perfil?.tipo_documento    ?? "",
-    document:     perfil?.numeroDocumento  ?? perfil?.numero_documento  ?? "",
-    role:         u.rol?.nombre            ?? "",
+    name:         u.nombre ? `${u.nombre} ${u.apellido}`.trim()
+                           : perfil ? `${perfil.nombre} ${perfil.apellido}`.trim()
+                           : u.correo,
+    firstName:    u.nombre               ?? perfil?.nombre           ?? perfil?.nombre ?? "",
+    lastName:     u.apellido             ?? perfil?.apellido         ?? "",
+    phone:        u.telefono             ?? perfil?.telefono         ?? "",
+    documentType: perfil?.tipoDocumento  ?? perfil?.tipo_documento   ?? "",
+    document:     perfil?.numeroDocumento ?? perfil?.numero_documento ?? "",
+    role:         u.rol?.nombre          ?? "",
     rolId:        u.rolId,
-    photo:        perfil?.fotoPerfil       ?? perfil?.foto_perfil       ?? "",
+    photo:        u.fotoPerfil           ?? perfil?.fotoPerfil       ?? perfil?.foto_perfil ?? "",
     isActive:     u.estado === "Activo",
     estado:       u.estado,
   };
@@ -60,15 +62,12 @@ const getRoles = async () => {
 };
 
 const create = async ({ firstName, lastName, documentType, document, email, phone, role, photo, password, contrasena }) => {
-  const finalPassword = contrasena || password || document || "Highlife2024*";
   const rolFound = await prisma.rol.findFirst({ where: { nombre: role } });
   if (!rolFound) throw new Error(`Rol '${role}' no encontrado`);
 
-  // Correo duplicado
   const existeCorreo = await prisma.usuario.findUnique({ where: { correo: email } });
   if (existeCorreo) throw new Error(`Ya existe un usuario registrado con el correo ${email}`);
 
-  // Documento duplicado en empleados
   if (documentType && document) {
     const existeDocEmp = await prisma.empleado.findFirst({
       where: { tipoDocumento: documentType, numeroDocumento: document }
@@ -91,6 +90,9 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
         contrasena: hash,
         estado:     "Activo",
         rolId:      rolFound.id,
+        nombre:     firstName ?? null,
+        apellido:   lastName  ?? null,
+        telefono:   phone     ?? null,
       },
     });
 
@@ -132,8 +134,12 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
 
 const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo }) => {
   return prisma.$transaction(async (tx) => {
-    // Siempre actualizar el correo del usuario
-    const usuarioData = { correo: email };
+    const usuarioData = {
+      correo:   email,
+      nombre:   firstName ?? null,
+      apellido: lastName  ?? null,
+      telefono: phone     ?? null,
+    };
 
     if (role) {
       const rolFound = await tx.rol.findFirst({ where: { nombre: role } });
@@ -195,48 +201,39 @@ const remove = async (id) => {
     const empleado = await tx.empleado.findFirst({ where: { usuarioId: Number(id) } });
 
     if (empleado) {
-      // Borrar novedades de los horarios del empleado
       await tx.novedad.deleteMany({
         where: { horario: { empleadoId: empleado.id } },
       });
-      // Borrar horarios
       await tx.horario.deleteMany({ where: { empleadoId: empleado.id } });
-      // Desasociar agendamiento detalles (poner empleadoId en null)
       await tx.agendamientoDetalle.updateMany({
         where: { empleadoId: empleado.id },
         data:  { empleadoId: null },
       });
-      // Desasociar venta detalles (poner empleadoId en null)
       await tx.ventaDetalle.updateMany({
         where: { empleadoId: empleado.id },
         data:  { empleadoId: null },
       });
-      // Borrar relaciones empleado-servicio
       await tx.empleadoServicio.deleteMany({ where: { empleadoId: empleado.id } });
-      // Borrar el empleado
       await tx.empleado.delete({ where: { id: empleado.id } });
     }
 
-    // Limpiar relaciones del cliente antes de borrarlo
     const cliente = await tx.cliente.findFirst({ where: { fk_id_usuario: Number(id) } });
     if (cliente) {
-      // Desasociar citas (poner clienteId en null)
       await tx.agendamientoCita.updateMany({
         where: { clienteId: cliente.PK_id_cliente },
         data:  { clienteId: null },
       });
-      // Desasociar cotizaciones
       await tx.cotizacion.updateMany({
         where: { clienteId: cliente.PK_id_cliente },
         data:  { clienteId: null },
       });
-      // Desasociar ventas
       await tx.venta.updateMany({
         where: { FK_id_cliente: cliente.PK_id_cliente },
         data:  { FK_id_cliente: null },
       });
       await tx.cliente.delete({ where: { PK_id_cliente: cliente.PK_id_cliente } });
     }
+
     await tx.resetPasswordToken.deleteMany({ where: { usuarioId: Number(id) } });
     await tx.usuario.delete({ where: { id: Number(id) } });
     return { ok: true };
