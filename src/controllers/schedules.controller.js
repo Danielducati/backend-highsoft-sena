@@ -201,7 +201,7 @@ const update = async (req, res) => {
 const remove = async (req, res) => {
   try {
     const { employeeId, weekStartDate } = req.params;
-    const { deleteReason } = req.body;
+    const deleteReason = req.body?.deleteReason;
 
     const monday     = buildFecha(weekStartDate, 0);
     const nextMonday = buildFecha(weekStartDate, 7);
