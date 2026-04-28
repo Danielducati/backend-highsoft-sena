@@ -49,6 +49,9 @@ model Usuario {
   horarioChanges       HorarioHistorial[]
   rol                  Rol                   @relation(fields: [rolId], references: [id], onUpdate: NoAction, map: "FK_Usuarios_Rol")
   foto_perfil          String?
+  nombre              String?              @db.VarChar(100)    // ← nuevo
+  apellido            String?              @db.VarChar(100)    // ← nuevo
+  telefono            String?              @db.VarChar(20)     // ← nuevo
   resetPasswordTokens ResetPasswordToken[]
   @@map("Usuarios")
 }
