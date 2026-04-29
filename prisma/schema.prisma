@@ -52,9 +52,12 @@ model Usuario {
   nombre              String?              @db.VarChar(100)    // ← nuevo
   apellido            String?              @db.VarChar(100)    // ← nuevo
   telefono            String?              @db.VarChar(20)     // ← nuevo
+  tipoDocumento   String? @map("tipo_documento")   @db.VarChar(30)
+  numeroDocumento String? @map("numero_documento") @db.VarChar(20)
   resetPasswordTokens ResetPasswordToken[]
   @@map("Usuarios")
 }
+
 model ResetPasswordToken {
   id        Int      @id @default(autoincrement())
   usuarioId Int      @map("FK_id_usuario")
