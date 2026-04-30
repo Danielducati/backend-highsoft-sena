@@ -26,7 +26,14 @@ const createRol = async (req, res) => {
     const { nombre, descripcion, permisosIds } = req.body;
     if (!nombre?.trim())
       return res.status(400).json({ error: "El nombre es obligatorio" });
-    const rol = await rolesModel.create({ nombre, descripcion, permisosIds });
+
+    // Validar nombre duplicado (case-insensitive)
+    const todos = await rolesModel.getAll();
+    const existe = todos.some(r => r.nombre.toLowerCase() === nombre.trim().toLowerCase());
+    if (existe)
+      return res.status(409).json({ error: `Ya existe un rol con el nombre "${nombre.trim()}"` });
+
+    const rol = await rolesModel.create({ nombre: nombre.trim(), descripcion, permisosIds });
     res.status(201).json(rol);
   } catch (err) {
     console.error("Error POST /roles:", err);
@@ -52,6 +59,16 @@ const updateRol = async (req, res) => {
     }
 
     // Si vienen otros datos, es una actualización completa
+    if (nombre?.trim()) {
+      const todos = await rolesModel.getAll();
+      const existe = todos.some(
+        r => r.nombre.toLowerCase() === nombre.trim().toLowerCase() &&
+             String(r.id) !== String(req.params.id)
+      );
+      if (existe)
+        return res.status(409).json({ error: `Ya existe un rol con el nombre "${nombre.trim()}"` });
+    }
+
     const rol = await rolesModel.update(req.params.id, { nombre, descripcion, permisosIds, estado });
     res.json(rol);
   } catch (err) {

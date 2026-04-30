@@ -5,6 +5,9 @@ const { verificarToken, soloAdmin } = require("../middlewares/auth.middleware");
 
 router.get("/",                    ctrl.getAll);
 router.get("/mi-perfil",           verificarToken,               ctrl.getMiPerfil);
+router.put("/mi-perfil",           verificarToken,               ctrl.updateMiPerfil);
+router.get("/mis-servicios",       verificarToken,               ctrl.getMisServicios);
+router.get("/disponibles",         verificarToken,               ctrl.getDisponibles);
 router.get("/:id",                 ctrl.getOne);
 router.post("/",                   verificarToken, soloAdmin, ctrl.create);
 router.put("/:id",                 verificarToken, soloAdmin, ctrl.update);

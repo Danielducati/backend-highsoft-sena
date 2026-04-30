@@ -18,6 +18,158 @@ const getMiPerfil = async (req, res) => {
 };
 
 // ======================================================
+// UPDATE MI PERFIL (empleado logueado actualiza su propio perfil)
+// ======================================================
+const updateMiPerfil = async (req, res) => {
+  try {
+    const emp = await prisma.empleado.findFirst({
+      where: { usuarioId: req.usuario.id },
+    });
+    if (!emp) return res.status(404).json({ error: "Perfil de empleado no encontrado" });
+
+    const {
+      nombre, apellido, tipo_documento, numero_documento,
+      telefono, ciudad, especialidad, direccion, foto_perfil,
+    } = req.body;
+
+    const data = {};
+    if (nombre          !== undefined) data.nombre          = nombre;
+    if (apellido        !== undefined) data.apellido        = apellido;
+    if (tipo_documento  !== undefined) data.tipoDocumento   = tipo_documento;
+    if (numero_documento !== undefined) data.numeroDocumento = numero_documento;
+    if (telefono        !== undefined) data.telefono        = telefono;
+    if (ciudad          !== undefined) data.ciudad          = ciudad;
+    if (especialidad    !== undefined) data.especialidad    = especialidad;
+    if (direccion       !== undefined) data.direccion       = direccion;
+    if (foto_perfil     !== undefined) data.fotoPerfil      = foto_perfil;
+
+    const updated = await prisma.empleado.update({
+      where: { id: emp.id },
+      data,
+    });
+
+    res.json(employeesModel.formatEmployee(updated));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ======================================================
+// GET DISPONIBLES (empleados con horario en una fecha)
+// ======================================================
+const getDisponibles = async (req, res) => {
+  try {
+    const { fecha } = req.query;
+    if (!fecha || isNaN(Date.parse(fecha))) {
+      return res.status(400).json({ error: "Parámetro 'fecha' inválido (YYYY-MM-DD)" });
+    }
+
+    // Fecha con Date.UTC para coincidir con cómo SQL Server guarda y Prisma lee las fechas @db.Date
+    const [y, m, d] = fecha.split("-").map(Number);
+    const fechaLocal = new Date(Date.UTC(y, m - 1, d));
+
+    // Empleados que tienen al menos un horario registrado en esa fecha
+    const horarios = await prisma.horario.findMany({
+      where: { fecha: fechaLocal },
+      include: { empleado: true },
+    });
+
+    const COLORS = ["#78D1BD","#A78BFA","#60A5FA","#FBBF24","#F87171","#34D399","#FB923C","#E879F9"];
+
+    // Deduplicar por empleado y filtrar activos
+    const seen = new Set();
+    const empleados = [];
+    horarios.forEach((h, idx) => {
+      if (!h.empleado || h.empleado.estado !== "Activo") return;
+      if (seen.has(h.empleadoId)) return;
+      seen.add(h.empleadoId);
+      empleados.push({
+        id:        String(h.empleado.id),
+        name:      `${h.empleado.nombre} ${h.empleado.apellido}`,
+        specialty: h.empleado.especialidad ?? "",
+        color:     COLORS[idx % COLORS.length],
+        isActive:  true,
+        // Rango de horario del día
+        horaInicio: h.horaInicio.toISOString().slice(11, 16),
+        horaFinal:  h.horaFinal.toISOString().slice(11, 16),
+      });
+    });
+
+    res.json(empleados);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ======================================================
+// GET MIS SERVICIOS (servicios asignados al empleado logueado)
+// ======================================================
+const getMisServicios = async (req, res) => {
+  try {
+    const emp = await prisma.empleado.findFirst({
+      where: { usuarioId: req.usuario.id },
+      select: { id: true, especialidad: true },
+    });
+    if (!emp) return res.status(404).json({ error: "Perfil de empleado no encontrado" });
+
+    // Primero intentar con EmpleadoServicio (relación explícita)
+    const relaciones = await prisma.empleadoServicio.findMany({
+      where: { empleadoId: emp.id },
+      include: { servicio: { include: { categoria: true } } },
+    });
+
+    if (relaciones.length > 0) {
+      const activos = relaciones
+        .filter(r => r.servicio?.estado === "Activo")
+        .map(r => ({
+          id:       String(r.servicio.id),
+          name:     r.servicio.nombre,
+          category: r.servicio.categoria?.nombre ?? "",
+          duration: r.servicio.duracion ?? 60,
+          price:    r.servicio.precio ? Number(r.servicio.precio) : 0,
+        }));
+      if (activos.length > 0) return res.json(activos);
+      // Si todas las relaciones apuntan a servicios inactivos, caer al fallback
+    }
+
+    // Fallback: filtrar por especialidad si no hay relaciones explícitas
+    if (emp.especialidad) {
+      const servicios = await prisma.servicio.findMany({
+        where: {
+          estado:    "Activo",
+          categoria: { nombre: emp.especialidad },
+        },
+        include: { categoria: true },
+      });
+      if (servicios.length > 0) {
+        return res.json(servicios.map(s => ({
+          id:       String(s.id),
+          name:     s.nombre,
+          category: s.categoria?.nombre ?? "",
+          duration: s.duracion ?? 60,
+          price:    s.precio ? Number(s.precio) : 0,
+        })));
+      }
+    }
+
+    // Sin relaciones ni especialidad coincidente → todos los servicios activos
+    const todos = await prisma.servicio.findMany({
+      where: { estado: "Activo" },
+      include: { categoria: true },
+    });
+    res.json(todos.map(s => ({
+      id:       String(s.id),
+      name:     s.nombre,
+      category: s.categoria?.nombre ?? "",
+      duration: s.duracion ?? 60,
+      price:    s.precio ? Number(s.precio) : 0,
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ======================================================
 // GET ALL
 // ======================================================
 const getAll = async (req, res) => {
@@ -287,4 +439,4 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, getMiPerfil, create, update, remove, resetPassword };
+module.exports = { getAll, getOne, getMiPerfil, updateMiPerfil, getMisServicios, getDisponibles, create, update, remove, resetPassword };

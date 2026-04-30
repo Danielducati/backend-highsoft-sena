@@ -1,0 +1,68 @@
+// PROPUESTA DE NUEVO ESQUEMA PARA HORARIOS Y NOVEDADES
+// Este archivo es solo para documentar la propuesta, no reemplaza el schema actual
+
+// 1. PLANTILLA SEMANAL (Base reutilizable)
+model PlantillaHorario {
+  id          Int      @id @default(autoincrement())
+  empleadoId  Int      @map("FK_id_empleado")
+  nombre      String   @db.VarChar(100) // "Horario Regular", "Horario Verano", etc.
+  activa      Boolean  @default(true)
+  fechaInicio DateTime @db.Date         // Desde cuándo aplica esta plantilla
+  fechaFin    DateTime? @db.Date        // Hasta cuándo (null = indefinida)
+  
+  empleado    Empleado @relation(fields: [empleadoId], references: [id])
+  diasSemana  DiaPlantilla[]
+  novedades   Novedad[]
+  
+  @@map("PlantillaHorario")
+}
+
+// 2. DÍAS DE LA PLANTILLA (Lun-Dom con horarios)
+model DiaPlantilla {
+  id           Int      @id @default(autoincrement())
+  plantillaId  Int      @map("FK_id_plantilla")
+  diaSemana    Int      // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  horaInicio   DateTime @db.Time
+  horaFin      DateTime @db.Time
+  activo       Boolean  @default(true) // Permite desactivar días específicos
+  
+  plantilla    PlantillaHorario @relation(fields: [plantillaId], references: [id], onDelete: Cascade)
+  
+  @@unique([plantillaId, diaSemana])
+  @@map("DiaPlantilla")
+}
+
+// 3. NOVEDADES REDISEÑADAS (Excepciones a la plantilla)
+model Novedad {
+  id           Int      @id @default(autoincrement())
+  empleadoId   Int      @map("FK_id_empleado")
+  plantillaId  Int?     @map("FK_id_plantilla") // Referencia a la plantilla afectada
+  tipo         String   @db.VarChar(50)         // incapacidad, permiso, etc.
+  fechaInicio  DateTime @db.Date
+  fechaFin     DateTime? @db.Date               // Para novedades de múltiples días
+  horaInicio   DateTime? @db.Time               // Para novedades parciales
+  horaFin      DateTime? @db.Time
+  descripcion  String   @db.VarChar(600)
+  estado       String   @default("pendiente")   // pendiente, aprobada, rechazada
+  tipoAfectacion String @db.VarChar(50)        // "dia_completo", "horas_especificas", "multiple_dias"
+  
+  empleado     Empleado @relation(fields: [empleadoId], references: [id])
+  plantilla    PlantillaHorario? @relation(fields: [plantillaId], references: [id])
+  
+  @@map("Novedad")
+}
+
+// 4. VISTA MATERIALIZADA DE DISPONIBILIDAD (Para consultas rápidas)
+model DisponibilidadEmpleado {
+  id         Int      @id @default(autoincrement())
+  empleadoId Int
+  fecha      DateTime @db.Date
+  horaInicio DateTime? @db.Time  // null = no disponible
+  horaFin    DateTime? @db.Time  // null = no disponible
+  disponible Boolean  @default(true)
+  motivo     String?  @db.VarChar(200) // "Novedad: Incapacidad", "Fuera de horario", etc.
+  
+  @@unique([empleadoId, fecha])
+  @@index([fecha, disponible])
+  @@map("DisponibilidadEmpleado")
+}

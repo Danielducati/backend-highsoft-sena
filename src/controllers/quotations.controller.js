@@ -26,10 +26,15 @@ const getOne = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { id_cliente, fecha, hora_inicio, notas, descuento, servicios } = req.body;
+    const { id_cliente, fecha, hora_inicio, notas, descuento, servicios, clienteOcasional } = req.body;
 
-    if (!id_cliente || isNaN(Number(id_cliente)))
-      return res.status(400).json({ error: "El cliente es obligatorio y debe ser válido" });
+    // Requiere cliente registrado O datos de cliente ocasional
+    if (!id_cliente && !clienteOcasional?.firstName) {
+      return res.status(400).json({ error: "El cliente es obligatorio" });
+    }
+    if (id_cliente && isNaN(Number(id_cliente))) {
+      return res.status(400).json({ error: "ID de cliente inválido" });
+    }
 
     if (!servicios || !Array.isArray(servicios) || servicios.length === 0)
       return res.status(400).json({ error: "Debe incluir al menos un servicio" });
@@ -47,6 +52,15 @@ const create = async (req, res) => {
     if (fecha && isNaN(Date.parse(fecha)))
       return res.status(400).json({ error: "La fecha no tiene un formato válido (YYYY-MM-DD)" });
 
+    // Validar que la fecha no sea en el pasado
+    if (fecha) {
+      const fechaCotizacion = new Date(fecha + "T00:00:00");
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      if (fechaCotizacion < hoy)
+        return res.status(400).json({ error: "La fecha de la cotización no puede ser en el pasado" });
+    }
+
     if (hora_inicio && !/^\d{2}:\d{2}$/.test(hora_inicio))
       return res.status(400).json({ error: "La hora debe tener formato HH:MM" });
 
@@ -54,7 +68,8 @@ const create = async (req, res) => {
       return res.status(400).json({ error: "El descuento debe ser un número mayor o igual a 0" });
 
     const id = await quotationsModel.create({
-      clienteId:  Number(id_cliente),
+      clienteId:      id_cliente ? Number(id_cliente) : null,
+      clienteOcasional: clienteOcasional ?? null,
       fecha,
       horaInicio: hora_inicio,
       notas:      notas ?? null,
@@ -89,6 +104,15 @@ const update = async (req, res) => {
 
     if (fecha && isNaN(Date.parse(fecha)))
       return res.status(400).json({ error: "La fecha no tiene un formato válido (YYYY-MM-DD)" });
+
+    // Validar que la fecha no sea en el pasado (solo si se proporciona una nueva fecha)
+    if (fecha) {
+      const fechaCotizacion = new Date(fecha + "T00:00:00");
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      if (fechaCotizacion < hoy)
+        return res.status(400).json({ error: "La fecha de la cotización no puede ser en el pasado" });
+    }
 
     if (hora_inicio && !/^\d{2}:\d{2}$/.test(hora_inicio))
       return res.status(400).json({ error: "La hora debe tener formato HH:MM" });
@@ -204,7 +228,7 @@ const updateEstado = async (req, res) => {
                     }
                   }
                 } catch (empErr) {
-                  console.warn("⚠️ No se pudo asignar empleado para servicio", detalle.servicioId, empErr.message);
+                  // No se pudo asignar empleado automáticamente, continuar sin asignación
                 }
               }
 
@@ -220,7 +244,7 @@ const updateEstado = async (req, res) => {
           }
         }
       } catch (citaErr) {
-        console.error("⚠️ No se pudo crear la cita automática:", citaErr.message);
+        // Error al crear cita automática, la cotización ya fue aprobada exitosamente
       }
     }
 

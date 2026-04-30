@@ -9,12 +9,13 @@ const uploadImage = async (req, res) => {
     const folder = req.body.folder || "highsoft";
 
     const result = await new Promise((resolve, reject) => {
+      // Timeout de 20 segundos para Cloudinary
+      const timeout = setTimeout(() => reject(new Error("Timeout al subir a Cloudinary")), 20_000);
+
       const stream = cloudinary.uploader.upload_stream(
-        {
-          folder,
-          resource_type: "image",
-        },
+        { folder, resource_type: "image" },
         (err, uploadResult) => {
+          clearTimeout(timeout);
           if (err) return reject(err);
           return resolve(uploadResult);
         }

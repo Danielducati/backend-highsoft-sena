@@ -8,6 +8,7 @@ const { validateCreateClient, validateUpdateClient,
 
 router.get("/",             verificarToken, hasPermission("clientes.ver"),    ctrl.getAll);
 router.get("/mi-perfil",    verificarToken,                                    ctrl.getMiPerfil);
+router.get("/para-citas",   verificarToken,                                    ctrl.getParaCitas);
 router.get("/:id",          verificarToken, validateClientId,
                                             hasPermission("clientes.ver"),    ctrl.getOne);
 router.post("/",            validateCreateClient,                              ctrl.create);  // público

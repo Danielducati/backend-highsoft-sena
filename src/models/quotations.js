@@ -98,7 +98,40 @@ const getById = async (id) => {
   return c ? formatQuotation(c) : null;
 };
 
-const create = async ({ clienteId, fecha, horaInicio, notas, descuento = 0, servicios }) => {
+const create = async ({ clienteId, clienteOcasional, fecha, horaInicio, notas, descuento = 0, servicios }) => {
+  // Resolver clienteId — si viene cliente ocasional, crearlo primero
+  let resolvedClienteId = clienteId ? Number(clienteId) : null;
+
+  if (!resolvedClienteId && clienteOcasional?.firstName) {
+    const bcrypt = require("bcryptjs");
+    const prisma2 = require("../config/prisma");
+    const correo = clienteOcasional.email || `ocasional_${Date.now()}@highlife.com`;
+
+    // Buscar si ya existe por correo
+    const existeCorreo = await prisma2.cliente.findFirst({ where: { correo } });
+    if (existeCorreo) {
+      resolvedClienteId = existeCorreo.PK_id_cliente;
+    } else {
+      const rolCliente = await prisma2.rol.findFirst({ where: { nombre: "Cliente" } });
+      const hashed = await bcrypt.hash("cliente123", 10);
+      const usuario = await prisma2.usuario.create({
+        data: { correo, contrasena: hashed, estado: "Activo", rolId: rolCliente?.id ?? 3 },
+      });
+      const cliente = await prisma2.cliente.create({
+        data: {
+          nombre:    clienteOcasional.firstName,
+          apellido:  clienteOcasional.lastName || "",
+          correo:    clienteOcasional.email    || null,
+          telefono:  clienteOcasional.phone    || null,
+          foto_perfil: "",
+          Estado:    "Activo",
+          fk_id_usuario: usuario.id,
+        },
+      });
+      resolvedClienteId = cliente.PK_id_cliente;
+    }
+  }
+
   const subtotal  = servicios.reduce((s, sv) => s + sv.precio * sv.cantidad, 0);
   const total     = subtotal - descuento;
   const notasFull = encodeEmpleados(notas, servicios);
@@ -106,7 +139,7 @@ const create = async ({ clienteId, fecha, horaInicio, notas, descuento = 0, serv
   return prisma.$transaction(async (tx) => {
     const cot = await tx.cotizacion.create({
       data: {
-        clienteId:  Number(clienteId),
+        clienteId:  resolvedClienteId,
         fecha:      fecha ? new Date(fecha + "T12:00:00") : new Date(),
         horaInicio: horaInicio ? new Date(`1970-01-01T${horaInicio}:00`) : null,
         subtotal,

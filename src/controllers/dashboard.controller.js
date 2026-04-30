@@ -6,16 +6,25 @@ const ERROR = require("../utils/errorMessages");
 const VALID_PERIODS = ["7days", "30days", "90days", "year"];
 
 function getDateFilter(period) {
+  const ahora = new Date();
   const desde = new Date();
 
   if (period === "7days") {
-    desde.setDate(desde.getDate() - 7);
+    // Últimos 7 días: desde hace 7 días hasta hoy
+    desde.setDate(ahora.getDate() - 7);
+    desde.setHours(0, 0, 0, 0);
   } else if (period === "30days") {
-    desde.setDate(desde.getDate() - 30);
+    // Últimos 30 días: desde hace 30 días hasta hoy
+    desde.setDate(ahora.getDate() - 30);
+    desde.setHours(0, 0, 0, 0);
   } else if (period === "90days") {
-    desde.setDate(desde.getDate() - 90);
+    // Últimos 90 días: desde hace 90 días hasta hoy
+    desde.setDate(ahora.getDate() - 90);
+    desde.setHours(0, 0, 0, 0);
   } else if (period === "year") {
-    desde.setFullYear(desde.getFullYear(), 0, 1);
+    // Este año: desde el 1 de enero del año actual hasta hoy
+    desde.setFullYear(ahora.getFullYear(), 0, 1);
+    desde.setHours(0, 0, 0, 0);
   }
 
   return desde;
@@ -41,8 +50,20 @@ const getStats = async (req, res) => {
       });
     }
 
+    const ahora = new Date();
     const desde = getDateFilter(period);
-    const anterior = new Date(desde.getTime() - (new Date() - desde));
+    
+    // Calcular período anterior con la misma duración
+    const duracionMs = ahora.getTime() - desde.getTime();
+    const anterior = new Date(desde.getTime() - duracionMs);
+    anterior.setHours(0, 0, 0, 0);
+
+    // Log para debugging (puedes comentar en producción)
+    console.log(`📊 Dashboard - Período: ${period}`);
+    console.log(`   Desde: ${desde.toISOString().split('T')[0]}`);
+    console.log(`   Hasta: ${ahora.toISOString().split('T')[0]}`);
+    console.log(`   Anterior desde: ${anterior.toISOString().split('T')[0]}`);
+    console.log(`   Anterior hasta: ${desde.toISOString().split('T')[0]}`);
 
     const [
       clientesActivos,
@@ -161,7 +182,6 @@ const getStats = async (req, res) => {
       }
     });
 
-    const ahora = new Date();
     const pad = n => String(n).padStart(2, "0");
     const hoyStr = `${ahora.getFullYear()}-${pad(ahora.getMonth()+1)}-${pad(ahora.getDate())}`;
 
