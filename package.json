@@ -2,11 +2,13 @@
   "name": "backend",
   "version": "1.0.0",
   "main": "src/server.js",
-  "scripts": {
+"scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/server.js",
     "test-email": "node scripts/test-email.js",
-    "diagnose-email": "node scripts/test-email.js"
+    "diagnose-email": "node scripts/test-email.js",
+    "start": "node src/server.js",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
@@ -31,3 +33,4 @@
     "prisma": "^7.8.0"
   }
 }
+
