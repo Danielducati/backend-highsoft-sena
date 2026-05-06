@@ -8,7 +8,7 @@
     "test-email": "node scripts/test-email.js",
     "diagnose-email": "node scripts/test-email.js",
     "start": "node src/server.js",
-    "postinstall": "prisma generate"
+    "postinstall": "npx prisma generate"
   },
   "keywords": [],
   "author": "",
