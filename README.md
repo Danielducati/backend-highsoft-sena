@@ -9,7 +9,7 @@
 ### npm install 
 
 ### Metodos para usar en thunder client  
-###  POST http://localhost:3001/clients
+###  POST https://backend-highsoft-sena-production.up.railway.app/clients
 ### {
 ###  "firstName": "Diego rios",
 ###  "lastName": "Rios Rios",
