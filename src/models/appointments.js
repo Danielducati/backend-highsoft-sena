@@ -3,9 +3,12 @@ const prisma = require("../config/prisma");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatCita(cita) {
+  // La hora se guarda en la BD como UTC. Para mostrarla correctamente
+  // usamos UTC directamente (sin conversión de zona horaria) porque
+  // ya se guardó compensada al momento de crear/actualizar.
   const startTime = cita.horario
-  ? cita.horario.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Bogota" })
-  : "00:00";
+    ? `${String(cita.horario.getUTCHours()).padStart(2, "0")}:${String(cita.horario.getUTCMinutes()).padStart(2, "0")}`
+    : "00:00";
 
   const servicios = (cita.detalles ?? []).map(d => ({
     serviceId:    String(d.servicioId),
@@ -46,7 +49,19 @@ const include = {
   },
 };
 
-// ── Queries ───────────────────────────────────────────────────────────────────
+// Convierte "HH:mm" a un objeto Date con esa hora en UTC exacto
+// para que no haya conversión de zona horaria al guardar en PostgreSQL TIME
+function horaToUTC(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
+}
+
+// Convierte "HH:mm" a un objeto Date con esa hora en UTC exacto
+// para que no haya conversión de zona horaria al guardar en PostgreSQL TIME
+function horaToUTC(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
+}
 const getAll = async (clienteId = null, empleadoId = null) => {
   let where = {};
   if (clienteId)  where.clienteId = clienteId;
@@ -74,7 +89,7 @@ const create = async ({ cliente, fecha, hora, notas, servicios, empleadoId }) =>
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-        horario: new Date(`1970-01-01T${hora}:00`),
+        horario:   horaToUTC(hora),
         notas:     notas ?? null,
         estado:    "Pendiente",
       },
@@ -116,7 +131,7 @@ const update = async (id, { cliente, fecha, hora, notas, servicios }) => {
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-        horario: new Date(`1970-01-01T${hora}:00`),
+        horario:   horaToUTC(hora),
         notas:     notas ?? null,
       },
     });
