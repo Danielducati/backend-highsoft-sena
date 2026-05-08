@@ -135,11 +135,13 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
 const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo }) => {
   return prisma.$transaction(async (tx) => {
     const usuarioData = {
-      correo:   email,
-      nombre:   firstName ?? null,
-      apellido: lastName  ?? null,
-      telefono: phone     ?? null,
-    };
+    correo:          email,
+    nombre:          firstName    ?? null,
+    apellido:        lastName     ?? null,
+    telefono:        phone        ?? null,
+    tipoDocumento:   documentType ?? null,  // ← agregar
+    numeroDocumento: document     ?? null,  // ← agregar
+  };
 
     if (role) {
       const rolFound = await tx.rol.findFirst({ where: { nombre: role } });
