@@ -105,10 +105,60 @@ const getAvailableAppointments = async () => {
   }));
 };
 
-const create = async ({ tipo, clienteId, citaId, servicios, descuento, metodoPago, clienteOcasional }) => {
+const create = async ({ tipo, clienteId, clienteNombre, citaId, servicios, descuento, metodoPago, clienteOcasional }) => {
   return prisma.$transaction(async (tx) => {
     let resolvedClienteId = clienteId ? Number(clienteId) : null;
     let items = servicios ?? [];
+
+    // Si viene clienteNombre y no hay clienteId, crear cliente temporal con solo el nombre
+    if (!resolvedClienteId && clienteNombre && clienteNombre.trim()) {
+      const nombreCompleto = clienteNombre.trim();
+      const partesNombre = nombreCompleto.split(' ');
+      const firstName = partesNombre[0] || '';
+      const lastName = partesNombre.slice(1).join(' ') || '';
+
+      // Buscar si ya existe un cliente con ese nombre
+      const existeNombre = await tx.cliente.findFirst({
+        where: {
+          AND: [
+            { nombre: { contains: firstName, mode: 'insensitive' } },
+            lastName ? { apellido: { contains: lastName, mode: 'insensitive' } } : {}
+          ]
+        }
+      });
+
+      if (existeNombre) {
+        resolvedClienteId = existeNombre.PK_id_cliente;
+      } else {
+        // Crear cliente temporal con solo el nombre
+        const bcrypt = require("bcryptjs");
+        const hashed = await bcrypt.hash("cliente123", 10);
+
+        const usuario = await tx.usuario.create({
+          data: {
+            correo: `temp_${Date.now()}@highlife.com`,
+            contrasena: hashed,
+            estado: "Activo",
+            rolId: 3,
+          },
+        });
+
+        const cliente = await tx.cliente.create({
+          data: {
+            nombre: firstName,
+            apellido: lastName,
+            tipo_documento: null,
+            numero_documento: null,
+            correo: null,
+            telefono: null,
+            foto_perfil: "",
+            Estado: "Activo",
+            fk_id_usuario: usuario.id,
+          },
+        });
+        resolvedClienteId = cliente.PK_id_cliente;
+      }
+    }
 
     // Si viene cliente ocasional y no hay clienteId, crear cliente temporal
     if (!resolvedClienteId && clienteOcasional?.firstName) {
