@@ -140,7 +140,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
     if (firstName !== undefined) usuarioData.nombre   = firstName ?? null;
     if (lastName  !== undefined) usuarioData.apellido = lastName  ?? null;
     if (phone     !== undefined) usuarioData.telefono = phone     ?? null;
-    if (photo     !== undefined && photo !== "") usuarioData.foto_perfil = photo;
+    if (photo     !== undefined) usuarioData.foto_perfil = photo;
 
     if (contrasena && contrasena.trim() !== "") {
       const hash = await bcrypt.hash(contrasena.trim(), 10);
@@ -203,7 +203,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           ...(document !== undefined && { numeroDocumento: document }),
           ...(email !== undefined && { correo: email || "" }),
           ...(phone !== undefined && { telefono: phone }),
-          ...(photo !== undefined && photo !== "" && { fotoPerfil: photo }),
+          ...(photo !== undefined && { fotoPerfil: photo }),
         },
       });
     }
@@ -233,7 +233,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           ...(document !== undefined && { numero_documento: document }),
           ...(email !== undefined && { correo: email || "" }),
           ...(phone !== undefined && { telefono: phone }),
-          ...(photo !== undefined && photo !== "" && { foto_perfil: photo }),
+          ...(photo !== undefined && { foto_perfil: photo }),
         },
       });
     }
