@@ -80,6 +80,30 @@ const update = async (req, res) => {
   }
 };
 
+// El cliente logueado edita su propio perfil (sin permiso clientes.editar)
+const updateMiPerfil = async (req, res) => {
+  try {
+    const cliente = await prisma.cliente.findFirst({
+      where: { fk_id_usuario: req.usuario.id },
+    });
+    if (!cliente) return res.status(404).json({ error: "No se encontró tu perfil de cliente" });
+
+    const { firstName, lastName, documentType, document, phone, address, image } = req.body;
+
+    const updated = await clientsModel.update(cliente.PK_id_cliente, {
+      firstName:    firstName    ?? cliente.nombre,
+      lastName:     lastName     ?? cliente.apellido,
+      documentType: documentType ?? cliente.tipo_documento,
+      document:     document     ?? cliente.numero_documento,
+      email:        cliente.correo, // el correo no se puede cambiar desde aquí
+      phone:        phone        ?? cliente.telefono,
+      address:      address      ?? cliente.direccion,
+      image:        image,
+    });
+    res.json(updated);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};
+
 const setStatus = async (req, res) => {
   try {
     await clientsModel.setStatus(req.params.id, req.body.isActive);
@@ -149,4 +173,4 @@ const getParaCitas = async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 
-module.exports = { getAll, getMiPerfil, getParaCitas, getOne, create, update, setStatus, remove };
+module.exports = { getAll, getMiPerfil, getParaCitas, getOne, create, update, updateMiPerfil, setStatus, remove };

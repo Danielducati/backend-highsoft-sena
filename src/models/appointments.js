@@ -3,9 +3,14 @@ const prisma = require("../config/prisma");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatCita(cita) {
+<<<<<<< HEAD
   // La hora se guarda en la BD como UTC. Para mostrarla correctamente
   // usamos UTC directamente (sin conversión de zona horaria) porque
   // ya se guardó compensada al momento de crear/actualizar.
+=======
+  // La hora se guarda en UTC sin offset (ej: 14:00 UTC = 14:00 hora ingresada)
+  // Se lee con getUTCHours/getUTCMinutes para no aplicar conversión de zona horaria
+>>>>>>> main
   const startTime = cita.horario
     ? `${String(cita.horario.getUTCHours()).padStart(2, "0")}:${String(cita.horario.getUTCMinutes()).padStart(2, "0")}`
     : "00:00";
@@ -85,11 +90,20 @@ const getById = async (id) => {
 
 const create = async ({ cliente, fecha, hora, notas, servicios, empleadoId }) => {
   return prisma.$transaction(async (tx) => {
+    // Guardar la hora como UTC compensando UTC-5 (Colombia)
+    // Si el usuario ingresa "14:00", guardamos "14:00 UTC" para que al leer
+    // con timeZone Bogota siga siendo "14:00"
+    const horarioUTC = new Date(`1970-01-01T${hora}:00.000Z`);
+
     const cita = await tx.agendamientoCita.create({
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
+<<<<<<< HEAD
         horario:   horaToUTC(hora),
+=======
+        horario:   horarioUTC,
+>>>>>>> main
         notas:     notas ?? null,
         estado:    "Pendiente",
       },
@@ -126,12 +140,21 @@ const create = async ({ cliente, fecha, hora, notas, servicios, empleadoId }) =>
 
 const update = async (id, { cliente, fecha, hora, notas, servicios }) => {
   return prisma.$transaction(async (tx) => {
+    if (!hora || !/^\d{2}:\d{2}$/.test(hora)) {
+      throw new Error(`Hora inválida recibida en update: "${hora}"`);
+    }
+    const horarioUTC = new Date(`1970-01-01T${hora}:00.000Z`);
+
     await tx.agendamientoCita.update({
       where: { id: Number(id) },
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
+<<<<<<< HEAD
         horario:   horaToUTC(hora),
+=======
+        horario:   horarioUTC,
+>>>>>>> main
         notas:     notas ?? null,
       },
     });

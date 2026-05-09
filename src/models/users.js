@@ -20,7 +20,7 @@ function formatUser(u, cliente = null) {
     document:     perfil?.numeroDocumento ?? perfil?.numero_documento ?? "",
     role:         u.rol?.nombre          ?? "",
     rolId:        u.rolId,
-    photo:        u.fotoPerfil           ?? perfil?.fotoPerfil       ?? perfil?.foto_perfil ?? "",
+    photo:        u.foto_perfil          ?? perfil?.fotoPerfil       ?? perfil?.foto_perfil ?? "",
     isActive:     u.estado === "Activo",
     estado:       u.estado,
   };
@@ -132,57 +132,108 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
   });
 };
 
-const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo }) => {
+const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo, contrasena }) => {
   return prisma.$transaction(async (tx) => {
-    const usuarioData = {
-    correo:          email,
-    nombre:          firstName    ?? null,
-    apellido:        lastName     ?? null,
-    telefono:        phone        ?? null,
-    tipoDocumento:   documentType ?? null,  // ← agregar
-    numeroDocumento: document     ?? null,  // ← agregar
-  };
+    const usuarioData = {};
 
-    if (role) {
-      const rolFound = await tx.rol.findFirst({ where: { nombre: role } });
-      if (rolFound) usuarioData.rolId = rolFound.id;
+    if (email     !== undefined) usuarioData.correo   = email;
+    if (firstName !== undefined) usuarioData.nombre   = firstName ?? null;
+    if (lastName  !== undefined) usuarioData.apellido = lastName  ?? null;
+    if (phone     !== undefined) usuarioData.telefono = phone     ?? null;
+    if (photo     !== undefined) usuarioData.foto_perfil = photo;
+
+    if (contrasena && contrasena.trim() !== "") {
+      const hash = await bcrypt.hash(contrasena.trim(), 10);
+      usuarioData.contrasena = hash;
     }
 
-    await tx.usuario.update({
+    let isNewRoleCliente = false;
+    let isNewRoleEmpleado = false;
+
+    if (role) {
+      const rolFound = await tx.rol.findFirst({
+        where: { nombre: { equals: role, mode: "insensitive" } },
+      });
+      if (rolFound) {
+        usuarioData.rolId = rolFound.id;
+        isNewRoleCliente = rolFound.nombre.toLowerCase() === "cliente";
+        isNewRoleEmpleado = rolFound.nombre.toLowerCase() !== "cliente";
+      }
+    }
+
+    const updatedUsuario = await tx.usuario.update({
       where: { id: Number(id) },
       data:  usuarioData,
+      include: { rol: true }
     });
+    
+    if (!role) {
+       isNewRoleCliente = updatedUsuario.rol.nombre.toLowerCase() === "cliente";
+       isNewRoleEmpleado = updatedUsuario.rol.nombre.toLowerCase() !== "cliente";
+    }
 
-    // Actualizar empleado si existe
+    console.log(`[update] usuario ${id} data:`, JSON.stringify(usuarioData));
+
+    // Verificar perfiles existentes
     const empleado = await tx.empleado.findFirst({ where: { usuarioId: Number(id) } });
-    if (empleado) {
+    const cliente = await tx.cliente.findFirst({ where: { fk_id_usuario: Number(id) } });
+
+    // Si el rol es empleado/admin pero no tiene perfil de empleado, se lo creamos
+    if (isNewRoleEmpleado && !empleado) {
+      await tx.empleado.create({
+        data: {
+          nombre:          firstName    || updatedUsuario.nombre || "",
+          apellido:        lastName     || updatedUsuario.apellido || "",
+          tipoDocumento:   documentType ?? (cliente?.tipo_documento || null),
+          numeroDocumento: document     ?? (cliente?.numero_documento || null),
+          correo:          email        || updatedUsuario.correo,
+          telefono:        phone        ?? (updatedUsuario.telefono || null),
+          fotoPerfil:      photo        ?? (cliente?.foto_perfil || null),
+          estado:          updatedUsuario.estado,
+          usuarioId:       updatedUsuario.id,
+        }
+      });
+    } else if (empleado) {
       await tx.empleado.update({
         where: { id: empleado.id },
         data: {
-          nombre:          firstName    || "",
-          apellido:        lastName     || "",
-          tipoDocumento:   documentType ?? null,
-          numeroDocumento: document     ?? null,
-          correo:          email        || "",
-          telefono:        phone        ?? null,
-          ...(photo !== undefined && photo !== "" && { fotoPerfil: photo }),
+          ...(firstName !== undefined && { nombre: firstName || "" }),
+          ...(lastName !== undefined && { apellido: lastName || "" }),
+          ...(documentType !== undefined && { tipoDocumento: documentType }),
+          ...(document !== undefined && { numeroDocumento: document }),
+          ...(email !== undefined && { correo: email || "" }),
+          ...(phone !== undefined && { telefono: phone }),
+          ...(photo !== undefined && { fotoPerfil: photo }),
         },
       });
     }
 
-    // Actualizar cliente si existe
-    const cliente = await tx.cliente.findFirst({ where: { fk_id_usuario: Number(id) } });
-    if (cliente) {
+    // Si el rol es cliente pero no tiene perfil de cliente, se lo creamos
+    if (isNewRoleCliente && !cliente) {
+      await tx.cliente.create({
+        data: {
+          nombre:           firstName    || updatedUsuario.nombre || "",
+          apellido:         lastName     || updatedUsuario.apellido || "",
+          tipo_documento:   documentType ?? (empleado?.tipoDocumento || null),
+          numero_documento: document     ?? (empleado?.numeroDocumento || null),
+          correo:           email        || updatedUsuario.correo,
+          telefono:         phone        ?? (updatedUsuario.telefono || null),
+          foto_perfil:      photo        ?? (empleado?.fotoPerfil || ""),
+          Estado:           updatedUsuario.estado,
+          fk_id_usuario:    updatedUsuario.id,
+        }
+      });
+    } else if (cliente) {
       await tx.cliente.update({
         where: { PK_id_cliente: cliente.PK_id_cliente },
         data: {
-          nombre:           firstName    || "",
-          apellido:         lastName     || "",
-          tipo_documento:   documentType ?? null,
-          numero_documento: document     ?? null,
-          correo:           email        || "",
-          telefono:         phone        ?? null,
-          ...(photo !== undefined && photo !== "" && { foto_perfil: photo }),
+          ...(firstName !== undefined && { nombre: firstName || "" }),
+          ...(lastName !== undefined && { apellido: lastName || "" }),
+          ...(documentType !== undefined && { tipo_documento: documentType }),
+          ...(document !== undefined && { numero_documento: document }),
+          ...(email !== undefined && { correo: email || "" }),
+          ...(phone !== undefined && { telefono: phone }),
+          ...(photo !== undefined && { foto_perfil: photo }),
         },
       });
     }
