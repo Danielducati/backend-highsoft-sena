@@ -319,4 +319,56 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { getStats };
+module.exports = { getStats, debugCitas };
+
+// ── DEBUG: ver estructura real de las citas en la BD ──────────────────────────
+async function debugCitas(req, res) {
+  try {
+    const prisma = require("../config/prisma");
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const citas = await prisma.agendamientoCita.findMany({
+      where: { fecha: { gte: hoy }, estado: { notIn: ["Cancelada", "Completada"] } },
+      take: 10,
+      orderBy: [{ fecha: "asc" }],
+      include: {
+        cliente: { select: { nombre: true, apellido: true } },
+        detalles: {
+          select: {
+            detalle: true,
+            servicioId: true,
+            empleadoId: true,
+            empleado: { select: { nombre: true, apellido: true } },
+            servicio: { select: { nombre: true } }
+          }
+        },
+        cotizacion: {
+          include: {
+            detalles: { include: { servicio: { select: { nombre: true } } } }
+          }
+        }
+      }
+    });
+
+    res.json(citas.map(c => ({
+      id: c.id,
+      fecha: c.fecha,
+      cliente: c.cliente ? `${c.cliente.nombre} ${c.cliente.apellido}` : null,
+      cotizacionId: c.cotizacionId,
+      detalles_count: c.detalles.length,
+      detalles: c.detalles.map(d => ({
+        servicioId: d.servicioId,
+        servicio_nombre: d.servicio?.nombre ?? null,
+        detalle_texto: d.detalle ?? null,
+        empleadoId: d.empleadoId,
+        empleado: d.empleado ? `${d.empleado.nombre} ${d.empleado.apellido}` : null,
+      })),
+      cotizacion_detalles: (c.cotizacion?.detalles ?? []).map(d => ({
+        servicio: d.servicio?.nombre ?? null
+      }))
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
