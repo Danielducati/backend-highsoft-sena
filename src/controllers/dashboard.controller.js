@@ -58,13 +58,7 @@ const getStats = async (req, res) => {
     const anterior = new Date(desde.getTime() - duracionMs);
     anterior.setHours(0, 0, 0, 0);
 
-    // Log para debugging (puedes comentar en producción)
-    console.log(`📊 Dashboard - Período: ${period}`);
-    console.log(`   Desde: ${desde.toISOString().split('T')[0]}`);
-    console.log(`   Hasta: ${ahora.toISOString().split('T')[0]}`);
-    console.log(`   Anterior desde: ${anterior.toISOString().split('T')[0]}`);
-    console.log(`   Anterior hasta: ${desde.toISOString().split('T')[0]}`);
-
+    // Cargar estadísticas en paralelo
     const [
       clientesActivos,
       citasActuales,
@@ -289,9 +283,6 @@ const getStats = async (req, res) => {
         const empleados = (c.detalles ?? [])
           .map(d => d.empleado ? `${d.empleado.nombre} ${d.empleado.apellido}` : null)
           .filter(Boolean);
-
-        // Debug: log para ver qué trae cada cita
-        console.log(`Cita #${c.id} → detalles: ${c.detalles?.length ?? 0}, servicios: [${todosServicios.join(", ")}], cotizacion: ${c.cotizacionId ?? "ninguna"}`);
 
         return {
           id: c.id,

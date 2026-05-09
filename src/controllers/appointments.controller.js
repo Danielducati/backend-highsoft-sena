@@ -167,8 +167,6 @@ const create = async (req, res) => {
       }
     }
 
-    console.log("Empleados a validar:", empleadoIds);
-
     if (empleadoIds.length > 0) {
 
       // Traer duración de cada servicio
@@ -197,7 +195,7 @@ const create = async (req, res) => {
         );
 
         const nuevaInicio = new Date(`1970-01-01T${hora}:00.000Z`);
-        const nuevaFin    = new Date(nuevaInicio.getTime() + duracionTotal * 60000);
+        const nuevaFin = new Date(nuevaInicio.getTime() + duracionTotal * 60000);
 
         console.log(`Empleado ${empId} → nuevaInicio: ${nuevaInicio}, nuevaFin: ${nuevaFin}`);
 
@@ -217,8 +215,6 @@ const create = async (req, res) => {
             }
           }
         });
-
-        console.log(`Citas encontradas para empleado ${empId}:`, citasEmpleado.length);
 
         for (const cita of citasEmpleado) {
 
