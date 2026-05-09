@@ -134,15 +134,17 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
 
 const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo }) => {
   return prisma.$transaction(async (tx) => {
-    const usuarioData = {
-      correo:   email,
-      nombre:   firstName ?? null,
-      apellido: lastName  ?? null,
-      telefono: phone     ?? null,
-    };
+    const usuarioData = {};
+
+    if (email     !== undefined) usuarioData.correo   = email;
+    if (firstName !== undefined) usuarioData.nombre   = firstName ?? null;
+    if (lastName  !== undefined) usuarioData.apellido = lastName  ?? null;
+    if (phone     !== undefined) usuarioData.telefono = phone     ?? null;
 
     if (role) {
-      const rolFound = await tx.rol.findFirst({ where: { nombre: role } });
+      const rolFound = await tx.rol.findFirst({
+        where: { nombre: { equals: role, mode: "insensitive" } },
+      });
       if (rolFound) usuarioData.rolId = rolFound.id;
     }
 
@@ -150,6 +152,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
       where: { id: Number(id) },
       data:  usuarioData,
     });
+    console.log(`[update] usuario ${id} data:`, JSON.stringify(usuarioData));
 
     // Actualizar empleado si existe
     const empleado = await tx.empleado.findFirst({ where: { usuarioId: Number(id) } });
