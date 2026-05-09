@@ -176,8 +176,18 @@ const getStats = async (req, res) => {
       include: {
         cliente: { select: { nombre: true, apellido: true } },
         detalles: {
-          take: 1,
-          include: { empleado: { select: { nombre: true, apellido: true } } }
+          select: {
+            detalle: true,
+            empleado: { select: { nombre: true, apellido: true } },
+            servicio: { select: { nombre: true } }
+          }
+        },
+        cotizacion: {
+          include: {
+            detalles: {
+              include: { servicio: { select: { nombre: true } } }
+            }
+          }
         }
       }
     });
@@ -258,19 +268,40 @@ const getStats = async (req, res) => {
         const fd = new Date(c.fecha);
         const fechaFormateada = `${fd.getUTCFullYear()}-${pad(fd.getUTCMonth()+1)}-${pad(fd.getUTCDate())}`;
         const horaFormateada = c.horario
-          ? new Date(c.horario).toLocaleTimeString("es-CO", {
-              hour: "2-digit", minute: "2-digit", hour12: false,
-              timeZone: "America/Bogota"
-            })
+          ? `${pad(new Date(c.horario).getUTCHours())}:${pad(new Date(c.horario).getUTCMinutes())}`
           : "—";
+
+        // Recopilar TODOS los servicios de los detalles
+        // Prioridad: nombre del servicio → campo detalle → nombre desde cotización
+        const servicios = (c.detalles ?? [])
+          .map(d => d.servicio?.nombre ?? d.detalle ?? null)
+          .filter(Boolean);
+
+        // Si no hay servicios en detalles, buscar en la cotización asociada
+        const serviciosCotizacion = servicios.length === 0
+          ? (c.cotizacion?.detalles ?? [])
+              .map(d => d.servicio?.nombre)
+              .filter(Boolean)
+          : [];
+
+        const todosServicios = servicios.length > 0 ? servicios : serviciosCotizacion;
+
+        const empleados = (c.detalles ?? [])
+          .map(d => d.empleado ? `${d.empleado.nombre} ${d.empleado.apellido}` : null)
+          .filter(Boolean);
+
+        // Debug: log para ver qué trae cada cita
+        console.log(`Cita #${c.id} → detalles: ${c.detalles?.length ?? 0}, servicios: [${todosServicios.join(", ")}], cotizacion: ${c.cotizacionId ?? "ninguna"}`);
+
         return {
           id: c.id,
           fecha: fechaFormateada,
           hora: horaFormateada,
           clienteName: c.cliente ? `${c.cliente.nombre} ${c.cliente.apellido}` : "—",
-          employeeName: c.detalles?.[0]?.empleado
-            ? `${c.detalles[0].empleado.nombre} ${c.detalles[0].empleado.apellido}`
-            : "—",
+          employeeName: empleados.length > 0 ? empleados[0] : "—",
+          serviceName: todosServicios.length > 0
+            ? todosServicios.join(", ")
+            : (c.notas ? c.notas.substring(0, 40) : "—"),
           estado: c.estado,
         };
       }),

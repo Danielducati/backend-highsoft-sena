@@ -3,14 +3,8 @@ const prisma = require("../config/prisma");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatCita(cita) {
-<<<<<<< HEAD
-  // La hora se guarda en la BD como UTC. Para mostrarla correctamente
-  // usamos UTC directamente (sin conversión de zona horaria) porque
-  // ya se guardó compensada al momento de crear/actualizar.
-=======
   // La hora se guarda en UTC sin offset (ej: 14:00 UTC = 14:00 hora ingresada)
   // Se lee con getUTCHours/getUTCMinutes para no aplicar conversión de zona horaria
->>>>>>> main
   const startTime = cita.horario
     ? `${String(cita.horario.getUTCHours()).padStart(2, "0")}:${String(cita.horario.getUTCMinutes()).padStart(2, "0")}`
     : "00:00";
@@ -99,11 +93,7 @@ const create = async ({ cliente, fecha, hora, notas, servicios, empleadoId }) =>
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-<<<<<<< HEAD
-        horario:   horaToUTC(hora),
-=======
         horario:   horarioUTC,
->>>>>>> main
         notas:     notas ?? null,
         estado:    "Pendiente",
       },
@@ -150,11 +140,7 @@ const update = async (id, { cliente, fecha, hora, notas, servicios }) => {
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-<<<<<<< HEAD
-        horario:   horaToUTC(hora),
-=======
         horario:   horarioUTC,
->>>>>>> main
         notas:     notas ?? null,
       },
     });
