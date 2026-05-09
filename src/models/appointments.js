@@ -48,7 +48,19 @@ const include = {
   },
 };
 
-// ── Queries ───────────────────────────────────────────────────────────────────
+// Convierte "HH:mm" a un objeto Date con esa hora en UTC exacto
+// para que no haya conversión de zona horaria al guardar en PostgreSQL TIME
+function horaToUTC(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
+}
+
+// Convierte "HH:mm" a un objeto Date con esa hora en UTC exacto
+// para que no haya conversión de zona horaria al guardar en PostgreSQL TIME
+function horaToUTC(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
+}
 const getAll = async (clienteId = null, empleadoId = null) => {
   let where = {};
   if (clienteId)  where.clienteId = clienteId;
