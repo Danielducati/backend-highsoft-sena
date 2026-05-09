@@ -20,7 +20,7 @@ function formatUser(u, cliente = null) {
     document:     perfil?.numeroDocumento ?? perfil?.numero_documento ?? "",
     role:         u.rol?.nombre          ?? "",
     rolId:        u.rolId,
-    photo:        u.fotoPerfil           ?? perfil?.fotoPerfil       ?? perfil?.foto_perfil ?? "",
+    photo:        u.foto_perfil          ?? perfil?.fotoPerfil       ?? perfil?.foto_perfil ?? "",
     isActive:     u.estado === "Activo",
     estado:       u.estado,
   };
