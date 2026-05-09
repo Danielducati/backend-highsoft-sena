@@ -12,6 +12,7 @@ router.get("/para-citas",   verificarToken,                                    c
 router.get("/:id",          verificarToken, validateClientId,
                                             hasPermission("clientes.ver"),    ctrl.getOne);
 router.post("/",            validateCreateClient,                              ctrl.create);  // público
+router.put("/mi-perfil",    verificarToken,                                    ctrl.updateMiPerfil); // cliente edita su propio perfil
 router.put("/:id",          verificarToken, validateClientId,
                                             validateUpdateClient,
                                             hasPermission("clientes.editar"), ctrl.update);
