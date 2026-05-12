@@ -58,13 +58,7 @@ const getStats = async (req, res) => {
     const anterior = new Date(desde.getTime() - duracionMs);
     anterior.setHours(0, 0, 0, 0);
 
-    // Log para debugging (puedes comentar en producción)
-    console.log(`📊 Dashboard - Período: ${period}`);
-    console.log(`   Desde: ${desde.toISOString().split('T')[0]}`);
-    console.log(`   Hasta: ${ahora.toISOString().split('T')[0]}`);
-    console.log(`   Anterior desde: ${anterior.toISOString().split('T')[0]}`);
-    console.log(`   Anterior hasta: ${desde.toISOString().split('T')[0]}`);
-
+    // Cargar estadísticas en paralelo
     const [
       clientesActivos,
       citasActuales,
@@ -176,8 +170,18 @@ const getStats = async (req, res) => {
       include: {
         cliente: { select: { nombre: true, apellido: true } },
         detalles: {
-          take: 1,
-          include: { empleado: { select: { nombre: true, apellido: true } } }
+          select: {
+            detalle: true,
+            empleado: { select: { nombre: true, apellido: true } },
+            servicio: { select: { nombre: true } }
+          }
+        },
+        cotizacion: {
+          include: {
+            detalles: {
+              include: { servicio: { select: { nombre: true } } }
+            }
+          }
         }
       }
     });
@@ -258,19 +262,37 @@ const getStats = async (req, res) => {
         const fd = new Date(c.fecha);
         const fechaFormateada = `${fd.getUTCFullYear()}-${pad(fd.getUTCMonth()+1)}-${pad(fd.getUTCDate())}`;
         const horaFormateada = c.horario
-          ? new Date(c.horario).toLocaleTimeString("es-CO", {
-              hour: "2-digit", minute: "2-digit", hour12: false,
-              timeZone: "America/Bogota"
-            })
+          ? `${pad(new Date(c.horario).getUTCHours())}:${pad(new Date(c.horario).getUTCMinutes())}`
           : "—";
+
+        // Recopilar TODOS los servicios de los detalles
+        // Prioridad: nombre del servicio → campo detalle → nombre desde cotización
+        const servicios = (c.detalles ?? [])
+          .map(d => d.servicio?.nombre ?? d.detalle ?? null)
+          .filter(Boolean);
+
+        // Si no hay servicios en detalles, buscar en la cotización asociada
+        const serviciosCotizacion = servicios.length === 0
+          ? (c.cotizacion?.detalles ?? [])
+              .map(d => d.servicio?.nombre)
+              .filter(Boolean)
+          : [];
+
+        const todosServicios = servicios.length > 0 ? servicios : serviciosCotizacion;
+
+        const empleados = (c.detalles ?? [])
+          .map(d => d.empleado ? `${d.empleado.nombre} ${d.empleado.apellido}` : null)
+          .filter(Boolean);
+
         return {
           id: c.id,
           fecha: fechaFormateada,
           hora: horaFormateada,
           clienteName: c.cliente ? `${c.cliente.nombre} ${c.cliente.apellido}` : "—",
-          employeeName: c.detalles?.[0]?.empleado
-            ? `${c.detalles[0].empleado.nombre} ${c.detalles[0].empleado.apellido}`
-            : "—",
+          employeeName: empleados.length > 0 ? empleados[0] : "—",
+          serviceName: todosServicios.length > 0
+            ? todosServicios.join(", ")
+            : (c.notas ? c.notas.substring(0, 40) : "—"),
           estado: c.estado,
         };
       }),
@@ -288,4 +310,56 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { getStats };
+module.exports = { getStats, debugCitas };
+
+// ── DEBUG: ver estructura real de las citas en la BD ──────────────────────────
+async function debugCitas(req, res) {
+  try {
+    const prisma = require("../config/prisma");
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const citas = await prisma.agendamientoCita.findMany({
+      where: { fecha: { gte: hoy }, estado: { notIn: ["Cancelada", "Completada"] } },
+      take: 10,
+      orderBy: [{ fecha: "asc" }],
+      include: {
+        cliente: { select: { nombre: true, apellido: true } },
+        detalles: {
+          select: {
+            detalle: true,
+            servicioId: true,
+            empleadoId: true,
+            empleado: { select: { nombre: true, apellido: true } },
+            servicio: { select: { nombre: true } }
+          }
+        },
+        cotizacion: {
+          include: {
+            detalles: { include: { servicio: { select: { nombre: true } } } }
+          }
+        }
+      }
+    });
+
+    res.json(citas.map(c => ({
+      id: c.id,
+      fecha: c.fecha,
+      cliente: c.cliente ? `${c.cliente.nombre} ${c.cliente.apellido}` : null,
+      cotizacionId: c.cotizacionId,
+      detalles_count: c.detalles.length,
+      detalles: c.detalles.map(d => ({
+        servicioId: d.servicioId,
+        servicio_nombre: d.servicio?.nombre ?? null,
+        detalle_texto: d.detalle ?? null,
+        empleadoId: d.empleadoId,
+        empleado: d.empleado ? `${d.empleado.nombre} ${d.empleado.apellido}` : null,
+      })),
+      cotizacion_detalles: (c.cotizacion?.detalles ?? []).map(d => ({
+        servicio: d.servicio?.nombre ?? null
+      }))
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
