@@ -1,11 +1,12 @@
 const express = require("express");
 const router  = express.Router();
 const ctrl    = require("../controllers/quotations.controller");
+const { verificarToken } = require("../middlewares/auth.middleware");
 
-router.get("/",              ctrl.getAll);
-router.get("/:id",           ctrl.getOne);
-router.post("/",             ctrl.create);
-router.put("/:id",           ctrl.update);
-router.put("/:id/estado",    ctrl.updateEstado);
+router.get("/",              verificarToken, ctrl.getAll);
+router.get("/:id",           verificarToken, ctrl.getOne);
+router.post("/",             verificarToken, ctrl.create);
+router.put("/:id",           verificarToken, ctrl.update);
+router.put("/:id/estado",    verificarToken, ctrl.updateEstado);
 
 module.exports = router;
