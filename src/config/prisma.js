@@ -10,9 +10,8 @@ const prisma = new PrismaClient({
     : ["error"],
 });
 
-// Verificar conexión al arrancar
 prisma.$connect()
-  .then(() => console.log("✅ Prisma conectado a SQL Server"))
+  .then(() => console.log("✅ Prisma conectado a PostgreSQL"))
   .catch(err => console.error("❌ Error Prisma:", err));
 
 module.exports = prisma;

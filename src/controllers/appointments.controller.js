@@ -167,8 +167,6 @@ const create = async (req, res) => {
       }
     }
 
-    console.log("Empleados a validar:", empleadoIds);
-
     if (empleadoIds.length > 0) {
 
       // Traer duración de cada servicio
@@ -196,8 +194,8 @@ const create = async (req, res) => {
           0
         );
 
-        const nuevaInicio = new Date(`1970-01-01T${hora}:00`);
-        const nuevaFin    = new Date(nuevaInicio.getTime() + duracionTotal * 60000);
+        const nuevaInicio = new Date(`1970-01-01T${hora}:00.000Z`);
+        const nuevaFin = new Date(nuevaInicio.getTime() + duracionTotal * 60000);
 
         console.log(`Empleado ${empId} → nuevaInicio: ${nuevaInicio}, nuevaFin: ${nuevaFin}`);
 
@@ -218,13 +216,11 @@ const create = async (req, res) => {
           }
         });
 
-        console.log(`Citas encontradas para empleado ${empId}:`, citasEmpleado.length);
-
         for (const cita of citasEmpleado) {
 
           const h = new Date(cita.horario);
           const inicioExistente = new Date(
-            `1970-01-01T${String(h.getHours()).padStart(2, "0")}:${String(h.getMinutes()).padStart(2, "0")}:00`
+            `1970-01-01T${String(h.getUTCHours()).padStart(2, "0")}:${String(h.getUTCMinutes()).padStart(2, "0")}:00.000Z`
           );
 
           for (const detalle of cita.detalles) {
@@ -280,10 +276,10 @@ const create = async (req, res) => {
               const hi = new Date(novedad.horaInicio);
               const hf = new Date(novedad.horaFinal);
               const novedadInicio = new Date(
-                `1970-01-01T${String(hi.getHours()).padStart(2,"0")}:${String(hi.getMinutes()).padStart(2,"0")}:00`
+                `1970-01-01T${String(hi.getUTCHours()).padStart(2,"0")}:${String(hi.getUTCMinutes()).padStart(2,"0")}:00.000Z`
               );
               const novedadFin = new Date(
-                `1970-01-01T${String(hf.getHours()).padStart(2,"0")}:${String(hf.getMinutes()).padStart(2,"0")}:00`
+                `1970-01-01T${String(hf.getUTCHours()).padStart(2,"0")}:${String(hf.getUTCMinutes()).padStart(2,"0")}:00.000Z`
               );
               if (nuevaInicio < novedadFin && nuevaFin > novedadInicio) {
                 return res.status(400).json({
