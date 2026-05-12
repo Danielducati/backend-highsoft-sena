@@ -71,6 +71,34 @@ const create = async (req, res) => {
     if (descuento !== undefined && (isNaN(Number(descuento)) || Number(descuento) < 0))
       return res.status(400).json({ error: "El descuento debe ser un número mayor o igual a 0" });
 
+    // Validar que el descuento no sea mayor al subtotal
+    let subtotal = 0;
+    if (tipo === "directo" && servicios) {
+      subtotal = servicios.reduce((sum, item) => sum + (Number(item.precio) * (item.qty || 1)), 0);
+    } else if (tipo === "cita" && citaIdFinal) {
+      // Para citas, necesitamos obtener el precio de la base de datos
+      try {
+        const prisma = require("../config/prisma");
+        const detalles = await prisma.agendamientoDetalle.findMany({
+          where: { citaId: Number(citaIdFinal) },
+          include: { servicio: true },
+        });
+        subtotal = detalles.reduce((sum, d) => {
+          const precio = d.precio !== null ? Number(d.precio) : Number(d.servicio?.precio ?? 0);
+          return sum + precio;
+        }, 0);
+      } catch (err) {
+        console.error("Error calculando subtotal de cita:", err);
+        return res.status(500).json({ error: "Error validando el descuento" });
+      }
+    }
+
+    if (descuento && Number(descuento) > subtotal) {
+      return res.status(400).json({ 
+        error: `El descuento ($${Number(descuento).toLocaleString("es-CO")}) no puede ser mayor al subtotal ($${subtotal.toLocaleString("es-CO")})` 
+      });
+    }
+
     const METODOS_PAGO = ["efectivo", "tarjeta", "transferencia", "nequi", "daviplata"];
     if (metodoPagoFinal && !METODOS_PAGO.includes(metodoPagoFinal.toLowerCase()))
       return res.status(400).json({ error: `Método de pago inválido. Valores permitidos: ${METODOS_PAGO.join(", ")}` });
