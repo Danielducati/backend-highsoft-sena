@@ -192,6 +192,12 @@ const updateEstado = async (req, res) => {
       });
 
       if (!citaExistente) {
+        console.log(`[updateEstado] Creando cita para cotización #${id}:`, {
+          clienteId: cotizacion.clienteId,
+          fecha: cotizacion.fecha,
+          horaInicio: cotizacion.horaInicio,
+          detalles: cotizacion.detalles.length,
+        });
         // Decodificar empleados guardados en notas
         const empleadosMap = (() => {
           const raw = cotizacion.notas ?? "";
