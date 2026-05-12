@@ -6,16 +6,17 @@ const { verificarToken, soloAdmin, hasPermission }        = require("../middlewa
 const { validateCreateClient, validateUpdateClient,
         validateClientId }                                 = require("../middlewares/validate.middleware");
 
-router.get("/",             verificarToken, hasPermission("clientes.ver"),    ctrl.getAll);
-router.get("/mi-perfil",    verificarToken,                                    ctrl.getMiPerfil);
-router.get("/para-citas",   verificarToken,                                    ctrl.getParaCitas);
-router.get("/:id",          verificarToken, validateClientId,
-                                            hasPermission("clientes.ver"),    ctrl.getOne);
-router.post("/",            validateCreateClient,                              ctrl.create);  // público
-router.put("/:id",          verificarToken, validateClientId,
-                                            validateUpdateClient,
-                                            hasPermission("clientes.editar"), ctrl.update);
-router.patch("/:id/status", verificarToken, soloAdmin, validateClientId,      ctrl.setStatus);
-router.delete("/:id",       verificarToken, soloAdmin, validateClientId,      ctrl.remove);
+router.get("/",              verificarToken, hasPermission("clientes.ver"),    ctrl.getAll);
+router.get("/mi-perfil",     verificarToken,                                    ctrl.getMiPerfil);
+router.get("/para-citas",    verificarToken,                                    ctrl.getParaCitas);
+router.get("/:id",           verificarToken, validateClientId,
+                                             hasPermission("clientes.ver"),    ctrl.getOne);
+router.post("/",             validateCreateClient,                              ctrl.create);  // público
+router.patch("/mi-perfil",   verificarToken,                                    ctrl.updateMiPerfil); // cliente edita su propio perfil
+router.put("/:id",           verificarToken, validateClientId,
+                                             validateUpdateClient,
+                                             hasPermission("clientes.editar"), ctrl.update);
+router.patch("/:id/status",  verificarToken, soloAdmin, validateClientId,      ctrl.setStatus);
+router.delete("/:id",        verificarToken, soloAdmin, validateClientId,      ctrl.remove);
 
 module.exports = router;

@@ -53,6 +53,7 @@ try {
 
 const updateUser = async (req, res) => {
 try {
+    console.log("PUT /users/:id body:", JSON.stringify(req.body, null, 2));
     const result = await usersModel.update(req.params.id, req.body);
     res.json(result);
 } catch (err) {

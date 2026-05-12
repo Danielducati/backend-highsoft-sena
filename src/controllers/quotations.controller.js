@@ -150,106 +150,161 @@ const updateEstado = async (req, res) => {
     if (!ESTADOS_VALIDOS.includes(estado))
       return res.status(400).json({ error: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(", ")}` });
 
+    // Si el usuario es cliente, verificar que la cotización le pertenece
+    // y que solo puede aprobar o cancelar
+    const rolUsuario = req.usuario?.rol?.toLowerCase();
+    const esCliente  = rolUsuario === "cliente";
+
+    if (esCliente) {
+      if (!["approved", "cancelled"].includes(estado))
+        return res.status(403).json({ error: "Los clientes solo pueden aprobar o cancelar cotizaciones" });
+
+      const cotizacionCheck = await prisma.cotizacion.findUnique({ where: { id } });
+      if (!cotizacionCheck)
+        return res.status(404).json({ error: "Cotización no encontrada" });
+
+      // Verificar que el cliente autenticado es dueño de la cotización
+      const clienteDelUsuario = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: req.usuario.id },
+      });
+      if (!clienteDelUsuario || cotizacionCheck.clienteId !== clienteDelUsuario.PK_id_cliente)
+        return res.status(403).json({ error: "No tienes permiso para modificar esta cotización" });
+
+      if (cotizacionCheck.estado !== "Pendiente")
+        return res.status(400).json({ error: "Solo se pueden aprobar cotizaciones en estado Pendiente" });
+    }
+
     await quotationsModel.updateEstado(id, estado);
 
     // Al aprobar, crear cita automáticamente si no existe ya una
     if (estado === "approved") {
-      try {
-        const cotizacion = await prisma.cotizacion.findUnique({
-          where: { id },
-          include: { detalles: { include: { servicio: true } } }
+      const cotizacion = await prisma.cotizacion.findUnique({
+        where: { id },
+        include: { detalles: { include: { servicio: true } } },
+      });
+
+      if (!cotizacion) {
+        return res.status(404).json({ error: "Cotización no encontrada tras actualizar estado" });
+      }
+
+      const citaExistente = await prisma.agendamientoCita.findFirst({
+        where: { cotizacionId: id },
+      });
+
+      if (!citaExistente) {
+        console.log(`[updateEstado] Creando cita para cotización #${id}:`, {
+          clienteId: cotizacion.clienteId,
+          fecha: cotizacion.fecha,
+          horaInicio: cotizacion.horaInicio,
+          detalles: cotizacion.detalles.length,
+        });
+        // Decodificar empleados guardados en notas
+        const empleadosMap = (() => {
+          const raw = cotizacion.notas ?? "";
+          const idx = raw.indexOf("__EMPLEADOS__:");
+          if (idx === -1) return {};
+          try { return JSON.parse(raw.slice(idx + "__EMPLEADOS__:".length)); }
+          catch { return {}; }
+        })();
+
+        // Usar fecha de la cotización o la fecha actual si no tiene
+        const fechaCita = cotizacion.fecha ?? new Date();
+        // Normalizar a medianoche UTC para comparaciones de fecha
+        const fechaCitaNorm = new Date(Date.UTC(
+          fechaCita.getUTCFullYear(),
+          fechaCita.getUTCMonth(),
+          fechaCita.getUTCDate(),
+        ));
+
+        const cita = await prisma.agendamientoCita.create({
+          data: {
+            clienteId:    cotizacion.clienteId ?? null,
+            cotizacionId: cotizacion.id,
+            fecha:        fechaCitaNorm,
+            horario:      cotizacion.horaInicio ?? null,
+            estado:       "Pendiente",
+            notas:        null,
+          },
         });
 
-        if (cotizacion && cotizacion.fecha) {
-          const citaExistente = await prisma.agendamientoCita.findFirst({
-            where: { cotizacionId: id }
-          });
+        for (const detalle of cotizacion.detalles) {
+          // Usar empleado guardado en la cotización si existe
+          let empleadoAsignado = empleadosMap[detalle.servicioId]
+            ? Number(empleadosMap[detalle.servicioId])
+            : null;
 
-          if (!citaExistente) {
-            // Decodificar empleados guardados en notas
-            const { empleadosMap } = (() => {
-              const raw = cotizacion.notas ?? "";
-              const idx = raw.indexOf("__EMPLEADOS__:");
-              if (idx === -1) return { empleadosMap: {} };
-              try { return { empleadosMap: JSON.parse(raw.slice(idx + "__EMPLEADOS__:".length)) }; }
-              catch { return { empleadosMap: {} }; }
-            })();
+          // Si no hay empleado asignado, buscar uno disponible automáticamente
+          if (!empleadoAsignado) {
+            try {
+              const empleadosDelServicio = await prisma.empleadoServicio.findMany({
+                where:   { servicioId: detalle.servicioId },
+                include: { empleado: true },
+              });
 
-            const cita = await prisma.agendamientoCita.create({
-              data: {
-                clienteId:    cotizacion.clienteId ?? null,
-                cotizacionId: cotizacion.id,
-                fecha:        cotizacion.fecha,
-                horario:      cotizacion.horaInicio ?? null,
-                estado:       "Pendiente",
-                notas:        null,
-              }
-            });
+              const horaInicio = cotizacion.horaInicio ? new Date(cotizacion.horaInicio) : null;
+              const duracion   = detalle.servicio?.duracion ?? 60;
 
-            for (const detalle of cotizacion.detalles) {
-              // Usar empleado guardado en la cotización, si existe
-              let empleadoAsignado = empleadosMap[detalle.servicioId]
-                ? Number(empleadosMap[detalle.servicioId])
-                : null;
+              for (const es of empleadosDelServicio) {
+                if (es.empleado.estado !== "Activo") continue;
 
-              // Si no hay empleado guardado, buscar uno disponible automáticamente
-              if (!empleadoAsignado) {
-                try {
-                  const empleadosDelServicio = await prisma.empleadoServicio.findMany({
-                    where: { servicioId: detalle.servicioId },
-                    include: { empleado: true }
+                if (horaInicio) {
+                  const nuevaFin = new Date(horaInicio.getTime() + duracion * 60000);
+                  const citasSolapadas = await prisma.agendamientoCita.findMany({
+                    where: {
+                      fecha:   fechaCitaNorm,
+                      estado:  { not: "Cancelada" },
+                      detalles: { some: { empleadoId: es.empleadoId } },
+                    },
+                    include: {
+                      detalles: {
+                        where:   { empleadoId: es.empleadoId },
+                        include: { servicio: true },
+                      },
+                    },
                   });
 
-                  const horaInicio = cotizacion.horaInicio ? new Date(cotizacion.horaInicio) : null;
-                  const duracion   = detalle.servicio?.duracion ?? 60;
-
-                  for (const es of empleadosDelServicio) {
-                    if (es.empleado.estado !== "Activo") continue;
-                    if (horaInicio && cotizacion.fecha) {
-                      const nuevaFin = new Date(horaInicio.getTime() + duracion * 60000);
-                      const citasSolapadas = await prisma.agendamientoCita.findMany({
-                        where: { fecha: cotizacion.fecha, estado: { not: "Cancelada" }, detalles: { some: { empleadoId: es.empleadoId } } },
-                        include: { detalles: { where: { empleadoId: es.empleadoId }, include: { servicio: true } } }
-                      });
-                      let disponible = true;
-                      for (const c of citasSolapadas) {
-                        const h = new Date(c.horario);
-                        const ini = new Date(`1970-01-01T${String(h.getUTCHours()).padStart(2,"0")}:${String(h.getUTCMinutes()).padStart(2,"0")}:00`);
-                        for (const d of c.detalles) {
-                          const fin = new Date(ini.getTime() + (d.servicio?.duracion ?? 60) * 60000);
-                          if (horaInicio < fin && nuevaFin > ini) { disponible = false; break; }
-                        }
-                        if (!disponible) break;
-                      }
-                      if (disponible) { empleadoAsignado = es.empleadoId; break; }
-                    } else {
-                      empleadoAsignado = es.empleadoId;
-                      break;
+                  let disponible = true;
+                  for (const c of citasSolapadas) {
+                    if (!c.horario) continue;
+                    const h   = new Date(c.horario);
+                    const ini = new Date(`1970-01-01T${String(h.getUTCHours()).padStart(2,"0")}:${String(h.getUTCMinutes()).padStart(2,"0")}:00`);
+                    for (const d of c.detalles) {
+                      const fin = new Date(ini.getTime() + (d.servicio?.duracion ?? 60) * 60000);
+                      if (horaInicio < fin && nuevaFin > ini) { disponible = false; break; }
                     }
+                    if (!disponible) break;
                   }
-                } catch (empErr) {
-                  // No se pudo asignar empleado automáticamente, continuar sin asignación
+                  if (disponible) { empleadoAsignado = es.empleadoId; break; }
+                } else {
+                  // Sin hora, asignar el primero activo disponible
+                  empleadoAsignado = es.empleadoId;
+                  break;
                 }
               }
-
-              await prisma.agendamientoDetalle.create({
-                data: {
-                  citaId:     cita.id,
-                  servicioId: detalle.servicioId,
-                  empleadoId: empleadoAsignado,
-                  precio:     detalle.precio ?? 0,
-                }
-              });
+            } catch (empErr) {
+              console.error(`[updateEstado] Error buscando empleado para servicio ${detalle.servicioId}:`, empErr.message);
             }
           }
+
+          await prisma.agendamientoDetalle.create({
+            data: {
+              citaId:     cita.id,
+              servicioId: detalle.servicioId,
+              empleadoId: empleadoAsignado ?? null,
+              precio:     detalle.precio ? Number(detalle.precio) : 0,
+            },
+          });
         }
-      } catch (citaErr) {
-        // Error al crear cita automática, la cotización ya fue aprobada exitosamente
+
+        console.log(`[updateEstado] Cita #${cita.id} creada para cotización #${id}`);
+      } else {
+        console.log(`[updateEstado] Ya existe cita #${citaExistente.id} para cotización #${id}, no se crea otra`);
       }
     }
 
     res.json({ ok: true });
   } catch (err) {
+    console.error("[updateEstado] Error:", err);
     if (err.code === "P2025")
       return res.status(404).json({ error: "Cotización no encontrada" });
     res.status(500).json({ error: err.message });

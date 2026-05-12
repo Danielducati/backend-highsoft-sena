@@ -3,9 +3,11 @@ const prisma = require("../config/prisma");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatCita(cita) {
+  // La hora se guarda en UTC sin offset (ej: 14:00 UTC = 14:00 hora ingresada)
+  // Se lee con getUTCHours/getUTCMinutes para no aplicar conversión de zona horaria
   const startTime = cita.horario
-  ? cita.horario.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Bogota" })
-  : "00:00";
+    ? `${String(cita.horario.getUTCHours()).padStart(2, "0")}:${String(cita.horario.getUTCMinutes()).padStart(2, "0")}`
+    : "00:00";
 
   const servicios = (cita.detalles ?? []).map(d => ({
     serviceId:    String(d.servicioId),
@@ -46,7 +48,19 @@ const include = {
   },
 };
 
-// ── Queries ───────────────────────────────────────────────────────────────────
+// Convierte "HH:mm" a un objeto Date con esa hora en UTC exacto
+// para que no haya conversión de zona horaria al guardar en PostgreSQL TIME
+function horaToUTC(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
+}
+
+// Convierte "HH:mm" a un objeto Date con esa hora en UTC exacto
+// para que no haya conversión de zona horaria al guardar en PostgreSQL TIME
+function horaToUTC(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
+}
 const getAll = async (clienteId = null, empleadoId = null) => {
   let where = {};
   if (clienteId)  where.clienteId = clienteId;
@@ -70,11 +84,16 @@ const getById = async (id) => {
 
 const create = async ({ cliente, fecha, hora, notas, servicios, empleadoId }) => {
   return prisma.$transaction(async (tx) => {
+    // Guardar la hora como UTC compensando UTC-5 (Colombia)
+    // Si el usuario ingresa "14:00", guardamos "14:00 UTC" para que al leer
+    // con timeZone Bogota siga siendo "14:00"
+    const horarioUTC = new Date(`1970-01-01T${hora}:00.000Z`);
+
     const cita = await tx.agendamientoCita.create({
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-        horario: new Date(`1970-01-01T${hora}:00`),
+        horario:   horarioUTC,
         notas:     notas ?? null,
         estado:    "Pendiente",
       },
@@ -111,12 +130,17 @@ const create = async ({ cliente, fecha, hora, notas, servicios, empleadoId }) =>
 
 const update = async (id, { cliente, fecha, hora, notas, servicios }) => {
   return prisma.$transaction(async (tx) => {
+    if (!hora || !/^\d{2}:\d{2}$/.test(hora)) {
+      throw new Error(`Hora inválida recibida en update: "${hora}"`);
+    }
+    const horarioUTC = new Date(`1970-01-01T${hora}:00.000Z`);
+
     await tx.agendamientoCita.update({
       where: { id: Number(id) },
       data: {
         clienteId: cliente ? Number(cliente) : null,
         fecha:     new Date(fecha),
-        horario: new Date(`1970-01-01T${hora}:00`),
+        horario:   horarioUTC,
         notas:     notas ?? null,
       },
     });
