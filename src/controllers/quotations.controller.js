@@ -150,6 +150,30 @@ const updateEstado = async (req, res) => {
     if (!ESTADOS_VALIDOS.includes(estado))
       return res.status(400).json({ error: `Estado inválido. Valores permitidos: ${ESTADOS_VALIDOS.join(", ")}` });
 
+    // Si el usuario es cliente, verificar que la cotización le pertenece
+    // y que solo puede aprobar o cancelar
+    const rolUsuario = req.usuario?.rol?.toLowerCase();
+    const esCliente  = rolUsuario === "cliente";
+
+    if (esCliente) {
+      if (!["approved", "cancelled"].includes(estado))
+        return res.status(403).json({ error: "Los clientes solo pueden aprobar o cancelar cotizaciones" });
+
+      const cotizacionCheck = await prisma.cotizacion.findUnique({ where: { id } });
+      if (!cotizacionCheck)
+        return res.status(404).json({ error: "Cotización no encontrada" });
+
+      // Verificar que el cliente autenticado es dueño de la cotización
+      const clienteDelUsuario = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: req.usuario.id },
+      });
+      if (!clienteDelUsuario || cotizacionCheck.clienteId !== clienteDelUsuario.PK_id_cliente)
+        return res.status(403).json({ error: "No tienes permiso para modificar esta cotización" });
+
+      if (cotizacionCheck.estado !== "Pendiente")
+        return res.status(400).json({ error: "Solo se pueden aprobar cotizaciones en estado Pendiente" });
+    }
+
     await quotationsModel.updateEstado(id, estado);
 
     // Al aprobar, crear cita automáticamente si no existe ya una
