@@ -64,7 +64,7 @@ const getAll = async (req, res) => {
   try {
     const horarios = await prisma.horario.findMany({
       include: { empleado: true },
-      orderBy: { fecha: "asc" },
+      orderBy: { fecha: "desc" },
     });
     res.json(formatSchedule(horarios));
   } catch (err) {
