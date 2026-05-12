@@ -95,7 +95,7 @@ const create = async (req, res) => {
 
     if (descuento && Number(descuento) > subtotal) {
       return res.status(400).json({ 
-        error: `El descuento ($${Number(descuento).toLocaleString("es-CO")}) no puede ser mayor al subtotal ($${subtotal.toLocaleString("es-CO")})` 
+        error: `El descuento de $${Number(descuento).toLocaleString("es-CO")} pesos no puede ser mayor al subtotal de $${subtotal.toLocaleString("es-CO")} pesos` 
       });
     }
 
