@@ -21,13 +21,29 @@ function formatCita(cita) {
     startTime,
   }));
 
+  // Extraer información de cliente ocasional de las notas si no hay cliente registrado
+  let clienteNombre = "Sin cliente";
+  let clienteTelefono = "";
+  
+  if (cita.cliente) {
+    clienteNombre = `${cita.cliente.nombre} ${cita.cliente.apellido}`;
+    clienteTelefono = cita.cliente.telefono ?? "";
+  } else if (cita.notas && cita.notas.startsWith("Cliente ocasional:")) {
+    // Formato: "Cliente ocasional: Nombre Apellido - Tel: 123456789"
+    const match = cita.notas.match(/Cliente ocasional:\s*(.+?)\s*-\s*Tel:\s*(.+)/);
+    if (match) {
+      clienteNombre = match[1].trim() || "Cliente ocasional";
+      clienteTelefono = match[2].trim();
+    } else {
+      clienteNombre = "Cliente ocasional";
+    }
+  }
+
   return {
     PK_id_cita:       cita.id,
     cliente_id:       cita.clienteId,
-    cliente_nombre:   cita.cliente
-      ? `${cita.cliente.nombre} ${cita.cliente.apellido}`
-      : "Sin cliente",
-    cliente_telefono: cita.cliente?.telefono ?? "",
+    cliente_nombre:   clienteNombre,
+    cliente_telefono: clienteTelefono,
     Fecha:   cita.fecha.toISOString().split("T")[0],
     Horario: startTime,
     Estado:  cita.estado,
