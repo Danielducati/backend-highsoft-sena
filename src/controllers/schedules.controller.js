@@ -378,7 +378,7 @@ const getAvailableTimeSlots = async (req, res) => {
       });
       
       slotsByDate[fechaISO].employees.add(h.empleadoId);
-    });
+    };
 
     // Convertir Set a array y calcular rango global por día
     const result = Object.keys(slotsByDate).map(date => {
