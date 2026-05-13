@@ -207,6 +207,19 @@ const updateEstado = async (req, res) => {
           catch { return {}; }
         })();
 
+        // Extraer información de cliente ocasional si existe
+        const clienteOcasional = (() => {
+          const raw = cotizacion.notas ?? "";
+          const idx = raw.indexOf("__CLIENTE_OCASIONAL__:");
+          if (idx === -1) return null;
+          const endIdx = raw.indexOf("__EMPLEADOS__:", idx);
+          const jsonStr = endIdx === -1 
+            ? raw.slice(idx + "__CLIENTE_OCASIONAL__:".length)
+            : raw.slice(idx + "__CLIENTE_OCASIONAL__:".length, endIdx);
+          try { return JSON.parse(jsonStr); }
+          catch { return null; }
+        })();
+
         // Usar fecha de la cotización o la fecha actual si no tiene
         const fechaCita = cotizacion.fecha ?? new Date();
         // Normalizar a medianoche UTC para comparaciones de fecha
@@ -216,6 +229,12 @@ const updateEstado = async (req, res) => {
           fechaCita.getUTCDate(),
         ));
 
+        // Preparar notas de la cita con información del cliente ocasional si existe
+        let notasCita = null;
+        if (clienteOcasional && !cotizacion.clienteId) {
+          notasCita = `Cliente ocasional: ${clienteOcasional.firstName || ''} ${clienteOcasional.lastName || ''} - Tel: ${clienteOcasional.phone || 'N/A'}`;
+        }
+
         const cita = await prisma.agendamientoCita.create({
           data: {
             clienteId:    cotizacion.clienteId ?? null,
@@ -223,7 +242,7 @@ const updateEstado = async (req, res) => {
             fecha:        fechaCitaNorm,
             horario:      cotizacion.horaInicio ?? null,
             estado:       "Pendiente",
-            notas:        null,
+            notas:        notasCita,
           },
         });
 
