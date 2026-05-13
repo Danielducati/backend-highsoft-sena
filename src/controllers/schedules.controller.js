@@ -324,6 +324,90 @@ const getHistoryStats = async (req, res) => {
   }
 };
 
+// Obtener franjas horarias disponibles para una semana (para el calendario de citas)
+const getAvailableTimeSlots = async (req, res) => {
+  try {
+    const { weekStartDate } = req.query;
+    
+    if (!weekStartDate) {
+      return res.status(400).json({ error: "weekStartDate es requerido (formato YYYY-MM-DD)" });
+    }
+
+    const monday = buildFecha(weekStartDate, 0);
+    const sunday = buildFecha(weekStartDate, 6);
+
+    // Obtener todos los horarios de la semana
+    const horarios = await prisma.horario.findMany({
+      where: {
+        fecha: { gte: monday, lte: sunday },
+      },
+      include: {
+        empleado: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            estado: true,
+          },
+        },
+      },
+      orderBy: [{ fecha: "asc" }, { horaInicio: "asc" }],
+    });
+
+    // Agrupar por fecha
+    const slotsByDate = {};
+    
+    for (const h of horarios) {
+      if (h.empleado.estado !== "Activo") continue;
+      
+      const fechaISO = h.fecha.toISOString().split("T")[0];
+      if (!slotsByDate[fechaISO]) {
+        slotsByDate[fechaISO] = {
+          date: fechaISO,
+          hasSchedules: true,
+          timeRanges: [],
+          employees: new Set(),
+        };
+      }
+      
+      slotsByDate[fechaISO].timeRanges.push({
+        startTime: h.horaInicio.toISOString().slice(11, 16),
+        endTime: h.horaFinal.toISOString().slice(11, 16),
+        employeeId: h.empleadoId,
+        employeeName: `${h.empleado.nombre} ${h.empleado.apellido}`,
+      });
+      
+      slotsByDate[fechaISO].employees.add(h.empleadoId);
+    };
+
+    // Convertir Set a array y calcular rango global por día
+    const result = Object.keys(slotsByDate).map(date => {
+      const data = slotsByDate[date];
+      const times = data.timeRanges.map(r => ({ start: r.startTime, end: r.endTime }));
+      const minTime = times.reduce((min, t) => t.start < min ? t.start : min, "23:59");
+      const maxTime = times.reduce((max, t) => t.end > max ? t.end : max, "00:00");
+      
+      return {
+        date: data.date,
+        hasSchedules: true,
+        minTime,
+        maxTime,
+        employeeCount: data.employees.size,
+        timeRanges: data.timeRanges,
+      };
+    });
+
+    res.json({
+      weekStartDate,
+      slots: result,
+      message: "Franjas horarias disponibles obtenidas exitosamente",
+    });
+  } catch (err) {
+    console.error("Error obteniendo franjas horarias:", err);
+    res.status(500).json({ error: "Error obteniendo franjas horarias disponibles" });
+  }
+};
+
 module.exports = { 
   getAll, 
   create, 
@@ -333,5 +417,7 @@ module.exports = {
   getEmployeeHistory,
   getWeekHistory,
   restoreFromHistory,
-  getHistoryStats
+  getHistoryStats,
+  // Endpoint para calendario de citas
+  getAvailableTimeSlots,
 };
