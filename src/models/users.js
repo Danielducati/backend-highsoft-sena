@@ -140,7 +140,10 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
     if (firstName !== undefined) usuarioData.nombre   = firstName ?? null;
     if (lastName  !== undefined) usuarioData.apellido = lastName  ?? null;
     if (phone     !== undefined) usuarioData.telefono = phone     ?? null;
-    if (photo     !== undefined) usuarioData.foto_perfil = photo;
+    // foto_perfil solo si el campo existe en el schema (puede no estar en producción)
+    if (photo !== undefined && photo !== null) {
+      try { usuarioData.foto_perfil = photo; } catch { /* campo no existe, ignorar */ }
+    }
 
     if (contrasena && contrasena.trim() !== "") {
       const hash = await bcrypt.hash(contrasena.trim(), 10);
