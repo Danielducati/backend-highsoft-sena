@@ -80,3 +80,37 @@ app.use("/api/upload",       uploadRoutes);
 app.listen(PORT, () => {
   console.log(`🔥 Backend corriendo en puerto ${PORT}`);
 });
+
+// ── Auto-cancelar citas vencidas ──────────────────────────────
+// Corre cada hora y cancela citas Pendientes cuya fecha ya pasó
+const prisma = require("./config/prisma");
+
+async function cancelarCitasVencidas() {
+  try {
+    const ahora = new Date();
+    // Fecha de hoy a medianoche UTC (para comparar solo por fecha)
+    const hoy = new Date(Date.UTC(
+      ahora.getUTCFullYear(),
+      ahora.getUTCMonth(),
+      ahora.getUTCDate()
+    ));
+
+    const resultado = await prisma.agendamientoCita.updateMany({
+      where: {
+        estado: "Pendiente",
+        fecha: { lt: hoy }, // fecha anterior a hoy
+      },
+      data: { estado: "Cancelada" },
+    });
+
+    if (resultado.count > 0) {
+      console.log(`⏰ Auto-canceladas ${resultado.count} cita(s) vencida(s)`);
+    }
+  } catch (err) {
+    console.error("❌ Error al auto-cancelar citas:", err.message);
+  }
+}
+
+// Ejecutar al iniciar y luego cada hora
+cancelarCitasVencidas();
+setInterval(cancelarCitasVencidas, 60 * 60 * 1000); // cada 1 hora
