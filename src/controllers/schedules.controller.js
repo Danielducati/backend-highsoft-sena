@@ -92,7 +92,7 @@ const create = async (req, res) => {
         const fecha     = buildFecha(weekStartDate, ds.dayIndex);
         const dayOfWeek = fecha.getUTCDay();
 
-        if (dayOfWeek === 0) throw new Error(scheduleErrors.BLOCKED_DAY);
+        // Domingos permitidos — el spa trabaja los 7 dias
 
         const start = toTime(ds.startTime);
         const end   = toTime(ds.endTime);
@@ -169,7 +169,7 @@ const update = async (req, res) => {
         const fecha     = buildFecha(weekStartDate, ds.dayIndex);
         const dayOfWeek = fecha.getUTCDay();
 
-        if (dayOfWeek === 0) throw new Error(scheduleErrors.BLOCKED_DAY);
+        // Domingos permitidos — el spa trabaja los 7 dias
 
         const start = toTime(ds.startTime);
         const end   = toTime(ds.endTime);
