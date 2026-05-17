@@ -4,13 +4,16 @@ const router  = express.Router();
 const {
   getAllUsers, getUserById, getRoles,
   createUser, updateUser, updateStatus, deleteUser,
+  getMiPerfil, updateMiPerfil,
 } = require("../controllers/users.controller");
 const { verificarToken, soloAdmin }                          = require("../middlewares/auth.middleware");
 const { validateCreateUser, validateUpdateUser,
         validateUserId, validateUserStatus }                  = require("../middlewares/validate.middleware");
 
-// ⚠️ /roles debe ir antes de /:id
+// ⚠️ rutas fijas antes de /:id
 router.get("/roles",        verificarToken,                                              getRoles);
+router.get("/mi-perfil",    verificarToken,                                              getMiPerfil);
+router.put("/mi-perfil",    verificarToken,                                              updateMiPerfil);
 router.get("/",             verificarToken, soloAdmin,                                   getAllUsers);
 router.get("/:id",          verificarToken, soloAdmin, validateUserId,                   getUserById);
 router.post("/",            verificarToken, soloAdmin, validateCreateUser,               createUser);
