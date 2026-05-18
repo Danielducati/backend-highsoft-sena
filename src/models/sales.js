@@ -282,4 +282,31 @@ const remove = async (id) => {
   });
 };
 
-module.exports = { getAll, getById, getAvailableAppointments, create, remove };
+const getMonthlyStats = async () => {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const ventasDelMes = await prisma.venta.findMany({
+    where: {
+      Fecha: {
+        gte: startOfMonth,
+        lte: endOfMonth,
+      },
+      Estado: "Activo",
+    },
+    include,
+  });
+
+  const totalVentasDelMes = ventasDelMes.length;
+  const ingresosTotalesDelMes = ventasDelMes.reduce((sum, v) => sum + Number(v.Total ?? 0), 0);
+
+  return {
+    mes: now.toLocaleDateString("es-CO", { month: "long", year: "numeric" }),
+    totalVentas: totalVentasDelMes,
+    ingresosTotales: ingresosTotalesDelMes,
+    ventas: ventasDelMes.map(formatVenta),
+  };
+};
+
+module.exports = { getAll, getById, getAvailableAppointments, create, remove, getMonthlyStats };
