@@ -92,6 +92,22 @@ const update = async (req, res) => {
     if (!id || isNaN(id))
       return res.status(400).json({ error: "ID inválido" });
 
+    // Verificar que la cotización existe y obtener su estado actual
+    const cotizacionActual = await prisma.cotizacion.findUnique({
+      where: { id },
+    });
+
+    if (!cotizacionActual) {
+      return res.status(404).json({ error: "Cotización no encontrada" });
+    }
+
+    // No permitir editar cotizaciones aprobadas
+    if (cotizacionActual.estado === "Aprobada") {
+      return res.status(400).json({ 
+        error: "No se pueden editar cotizaciones aprobadas. La cotización ya ha sido procesada y tiene una cita asociada." 
+      });
+    }
+
     const { id_cliente, fecha, hora_inicio, notas, descuento, servicios } = req.body;
 
     if (!servicios || !Array.isArray(servicios) || servicios.length === 0)
