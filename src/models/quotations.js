@@ -207,4 +207,45 @@ const updateEstado = async (id, status) => {
   });
 };
 
-module.exports = { getAll, getById, create, update, updateEstado };
+// Rechazar automáticamente cotizaciones vencidas
+const autoRejectExpired = async () => {
+  try {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0); // Normalizar a medianoche
+
+    // Buscar cotizaciones pendientes cuya fecha ya pasó
+    const cotizacionesVencidas = await prisma.cotizacion.findMany({
+      where: {
+        estado: "Pendiente",
+        fecha: {
+          lt: hoy, // Fecha menor que hoy (en el pasado)
+        },
+      },
+    });
+
+    if (cotizacionesVencidas.length === 0) {
+      return { rechazadas: 0, ids: [] };
+    }
+
+    // Actualizar todas las cotizaciones vencidas a "Rechazada"
+    const ids = cotizacionesVencidas.map(c => c.id);
+    
+    await prisma.cotizacion.updateMany({
+      where: {
+        id: { in: ids },
+      },
+      data: {
+        estado: "Rechazada",
+      },
+    });
+
+    console.log(`✅ Auto-rechazo: ${ids.length} cotización(es) vencida(s) rechazada(s) automáticamente:`, ids);
+    
+    return { rechazadas: ids.length, ids };
+  } catch (err) {
+    console.error("❌ Error en auto-rechazo de cotizaciones:", err);
+    return { rechazadas: 0, ids: [], error: err.message };
+  }
+};
+
+module.exports = { getAll, getById, create, update, updateEstado, autoRejectExpired };
