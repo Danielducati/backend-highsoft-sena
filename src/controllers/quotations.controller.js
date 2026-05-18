@@ -4,6 +4,9 @@ const prisma = require("../config/prisma");
 
 const getAll = async (req, res) => {
   try {
+    // Ejecutar auto-rechazo de cotizaciones vencidas antes de obtener la lista
+    await quotationsModel.autoRejectExpired();
+    
     res.json(await quotationsModel.getAll());
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -331,3 +334,21 @@ const updateEstado = async (req, res) => {
 };
 
 module.exports = { getAll, getOne, create, update, updateEstado };
+
+// Endpoint adicional para ejecutar manualmente el auto-rechazo
+const autoRejectExpired = async (req, res) => {
+  try {
+    const result = await quotationsModel.autoRejectExpired();
+    res.json({
+      ok: true,
+      message: `${result.rechazadas} cotización(es) vencida(s) rechazada(s) automáticamente`,
+      rechazadas: result.rechazadas,
+      ids: result.ids,
+    });
+  } catch (err) {
+    console.error("[autoRejectExpired] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getAll, getOne, create, update, updateEstado, autoRejectExpired };
