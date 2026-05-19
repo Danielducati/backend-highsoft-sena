@@ -85,4 +85,26 @@ try {
 
 };
 
-module.exports = { getAllUsers, getUserById, getRoles, createUser, updateUser, updateStatus, deleteUser };
+const getMiPerfil = async (req, res) => {
+  try {
+    const user = await usersModel.getById(req.usuario.id);
+    if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const updateMiPerfil = async (req, res) => {
+  try {
+    const { firstName, lastName, documentType, document, phone, photo } = req.body;
+    const result = await usersModel.update(req.usuario.id, {
+      firstName, lastName, documentType, document, phone, photo,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getAllUsers, getUserById, getRoles, createUser, updateUser, updateStatus, deleteUser, getMiPerfil, updateMiPerfil };
