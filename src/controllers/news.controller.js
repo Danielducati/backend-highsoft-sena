@@ -21,7 +21,24 @@ function formatNovedad(n) {
 
 const getAll = async (req, res) => {
   try {
+    let empleadoId = null;
+    const rol = (req.usuario?.rol ?? "").toLowerCase();
+
+    // Si es empleado, filtrar solo sus propias novedades
+    if (rol === "empleado") {
+      const empRecord = await prisma.empleado.findFirst({
+        where: { usuarioId: req.usuario.id },
+        select: { id: true }
+      });
+      if (empRecord) empleadoId = empRecord.id;
+    }
+
+    const whereClause = empleadoId 
+      ? { horario: { empleadoId } }
+      : {};
+
     const data = await prisma.novedad.findMany({
+      where: whereClause,
       include: { horario: { include: { empleado: true } } },
       orderBy: { fechaInicio: "desc" },
     });
@@ -33,7 +50,21 @@ const getAll = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { employeeId, type, date, fechaFinal, startTime, endTime, description, action, reassignToEmployeeId } = req.body;
+    let { employeeId, type, date, fechaFinal, startTime, endTime, description, action, reassignToEmployeeId } = req.body;
+
+    const rol = (req.usuario?.rol ?? "").toLowerCase();
+
+    // Si es empleado, forzar su propio empleadoId
+    if (rol === "empleado") {
+      const empRecord = await prisma.empleado.findFirst({
+        where: { usuarioId: req.usuario.id },
+        select: { id: true }
+      });
+      if (!empRecord) {
+        return res.status(400).json({ error: "No se encontró un perfil de empleado asociado a tu cuenta." });
+      }
+      employeeId = String(empRecord.id);
+    }
 
     if (!employeeId || !date || !description)
       return res.status(400).json({ error: newsErrors.NEWS_REQUIRED_FIELDS });
