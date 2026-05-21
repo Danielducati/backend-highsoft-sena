@@ -86,7 +86,7 @@ const updateRol = async (req, res) => {
   }
 };
 
-const ROLES_PROTEGIDOS = ["administrador", "admin", "empleado", "cliente"];
+const ROLES_PROTEGIDOS = ["administrador", "admin", "barbero", "babero", "cliente"];
 
 const deleteRol = async (req, res) => {
   try {
