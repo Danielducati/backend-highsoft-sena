@@ -45,11 +45,18 @@ const updateRol = async (req, res) => {
   try {
     const { nombre, descripcion, permisosIds, estado } = req.body;
 
-    // Proteger el rol Administrador
+    // Proteger roles base del sistema
     const rolActual = await rolesModel.getById(req.params.id);
-    if (rolActual?.nombre?.toLowerCase() === "administrador") {
-      if (estado && estado !== "Activo")
-        return res.status(403).json({ error: "No se puede desactivar el rol Administrador" });
+    if (!rolActual) return res.status(404).json({ error: "Rol no encontrado" });
+
+    const esProtegido = ROLES_PROTEGIDOS.includes(rolActual.nombre?.toLowerCase());
+    if (esProtegido) {
+      if (estado && estado !== "Activo") {
+        return res.status(403).json({ error: `No se puede desactivar el rol "${rolActual.nombre}" porque es un rol base del sistema` });
+      }
+      if (nombre && nombre.trim().toLowerCase() !== rolActual.nombre.toLowerCase()) {
+        return res.status(403).json({ error: `No se puede cambiar el nombre del rol "${rolActual.nombre}" porque es un rol base del sistema` });
+      }
     }
 
     // Si solo viene "estado", es un cambio de estado (toggle)
@@ -79,12 +86,15 @@ const updateRol = async (req, res) => {
   }
 };
 
+const ROLES_PROTEGIDOS = ["administrador", "admin", "empleado", "cliente"];
+
 const deleteRol = async (req, res) => {
   try {
-    // Proteger el rol Administrador
     const rolActual = await rolesModel.getById(req.params.id);
-    if (rolActual?.nombre?.toLowerCase() === "administrador")
-      return res.status(403).json({ error: "No se puede eliminar el rol Administrador" });
+    if (!rolActual) return res.status(404).json({ error: "Rol no encontrado" });
+
+    if (ROLES_PROTEGIDOS.includes(rolActual.nombre?.toLowerCase()))
+      return res.status(403).json({ error: `No se puede eliminar el rol "${rolActual.nombre}" porque es un rol base del sistema` });
 
     const count = await rolesModel.countUsuarios(req.params.id);
     if (count > 0)
@@ -92,10 +102,7 @@ const deleteRol = async (req, res) => {
         error: `No se puede eliminar — ${count} usuario(s) tienen este rol asignado`,
       });
     
-    // Eliminar primero los permisos asociados
     await rolesModel.deletePermissionsByRole(req.params.id);
-    
-    // Luego eliminar el rol completamente
     await rolesModel.deleteRole(req.params.id);
     
     res.json({ ok: true, mensaje: "Rol eliminado correctamente" });
