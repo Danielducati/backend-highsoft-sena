@@ -19,12 +19,14 @@ function formatClient(c, usuario = null) {
     ? fechas[0].toLocaleDateString("es-CO")
     : "-";
 
-  // Priorizar datos del Usuario sobre los del Cliente
-  const nombre = usuario?.nombre || c.nombre;
-  const apellido = usuario?.apellido || c.apellido;
-  const telefono = usuario?.telefono || c.telefono;
-  const fotoPerfil = usuario?.foto_perfil || c.foto_perfil;
-  const estado = usuario?.estado || c.Estado;
+  // Combinar datos de ambas tablas (usar el que tenga información)
+  const nombre = c.nombre || usuario?.nombre || "";
+  const apellido = c.apellido || usuario?.apellido || "";
+  const telefono = c.telefono || usuario?.telefono || "";
+  // Para la foto, priorizar la del Cliente si existe, sino la del Usuario
+  const fotoPerfil = c.foto_perfil || usuario?.foto_perfil || "";
+  // Para el estado, usar el del Cliente (es la fuente de verdad para el módulo de clientes)
+  const estado = c.Estado;
 
   return {
     id:               c.PK_id_cliente,
@@ -50,11 +52,10 @@ const INCLUDE_STATS = {
 };
 
 const getAll = async ({ soloActivos = false } = {}) => {
-  // Obtener todos los usuarios con rol "Cliente"
+  // Obtener todos los usuarios con rol "Cliente" (sin filtrar por estado aquí)
   const usuarios = await prisma.usuario.findMany({
     where: {
       rol: { nombre: "Cliente" },
-      ...(soloActivos ? { estado: "Activo" } : {}),
     },
     include: {
       rol: true,
@@ -96,10 +97,15 @@ const getAll = async ({ soloActivos = false } = {}) => {
     })
   );
 
-  // Filtrar y formatear, pasando el usuario para priorizar sus datos
-  return clientes
-    .filter(item => item.cliente)
-    .map(item => formatClient(item.cliente, item.usuario));
+  // Filtrar por estado del Cliente (no del Usuario) si soloActivos es true
+  let resultado = clientes.filter(item => item.cliente);
+  
+  if (soloActivos) {
+    resultado = resultado.filter(item => item.cliente.Estado === "Activo");
+  }
+
+  // Formatear, combinando datos de ambas tablas
+  return resultado.map(item => formatClient(item.cliente, item.usuario));
 };
 
 const getById = async (id) => {
