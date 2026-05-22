@@ -7,6 +7,15 @@ function formatUser(u, cliente = null) {
   const isEmpleado = !!u.empleado;
   const perfil     = isEmpleado ? u.empleado : cliente;
 
+  // Combinar foto: priorizar Usuario, luego Cliente, luego Empleado
+  let photo = u.foto_perfil;
+  if (!photo && cliente?.foto_perfil) {
+    photo = cliente.foto_perfil;
+  }
+  if (!photo && perfil?.fotoPerfil) {
+    photo = perfil.fotoPerfil;
+  }
+
   return {
     id:           u.id,
     email:        u.correo,
@@ -20,7 +29,7 @@ function formatUser(u, cliente = null) {
     document:     perfil?.numeroDocumento ?? perfil?.numero_documento ?? "",
     role:         u.rol?.nombre          ?? "",
     rolId:        u.rolId,
-    photo:        u.foto_perfil          ?? perfil?.fotoPerfil       ?? perfil?.foto_perfil ?? "",
+    photo:        photo ?? "",
     isActive:     u.estado === "Activo",
     estado:       u.estado,
   };
