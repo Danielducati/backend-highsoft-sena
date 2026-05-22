@@ -2,7 +2,7 @@
 const prisma = require("../config/prisma");
 const bcrypt = require("bcryptjs");
 
-function formatClient(c) {
+function formatClient(c, usuario = null) {
   // Calcular totalVisits y totalSpent desde relaciones incluidas
   const citas = c.citas ?? [];
   const ventas = c.Venta ?? [];
@@ -19,18 +19,25 @@ function formatClient(c) {
     ? fechas[0].toLocaleDateString("es-CO")
     : "-";
 
+  // Priorizar datos del Usuario sobre los del Cliente
+  const nombre = usuario?.nombre || c.nombre;
+  const apellido = usuario?.apellido || c.apellido;
+  const telefono = usuario?.telefono || c.telefono;
+  const fotoPerfil = usuario?.foto_perfil || c.foto_perfil;
+  const estado = usuario?.estado || c.Estado;
+
   return {
     id:               c.PK_id_cliente,
-    firstName:        c.nombre,
-    lastName:         c.apellido,
-    name:             `${c.nombre} ${c.apellido}`,
+    firstName:        nombre,
+    lastName:         apellido,
+    name:             `${nombre} ${apellido}`,
     email:            c.correo          ?? "",
-    phone:            c.telefono        ?? "",
+    phone:            telefono          ?? "",
     address:          c.direccion       ?? "",
     tipo_documento:   c.tipo_documento  ?? "",
     numero_documento: c.numero_documento ?? "",
-    image:            c.foto_perfil     ?? "",
-    isActive:         c.Estado === "Activo",
+    image:            fotoPerfil        ?? "",
+    isActive:         estado === "Activo",
     totalVisits,
     totalSpent,
     lastVisit,
@@ -85,20 +92,29 @@ const getAll = async ({ soloActivos = false } = {}) => {
         include: INCLUDE_STATS,
       });
 
-      return clienteConStats;
+      return { cliente: clienteConStats, usuario };
     })
   );
 
-  // Filtrar y formatear
-  return clientes.filter(Boolean).map(formatClient);
+  // Filtrar y formatear, pasando el usuario para priorizar sus datos
+  return clientes
+    .filter(item => item.cliente)
+    .map(item => formatClient(item.cliente, item.usuario));
 };
 
 const getById = async (id) => {
   const c = await prisma.cliente.findUnique({
     where:   { PK_id_cliente: Number(id) },
-    include: INCLUDE_STATS,
+    include: {
+      ...INCLUDE_STATS,
+      Usuarios: true,
+    },
   });
-  return c ? formatClient(c) : null;
+  
+  if (!c) return null;
+  
+  // Pasar el usuario para priorizar sus datos
+  return formatClient(c, c.Usuarios);
 };
 
 const create = async ({ firstName, lastName, documentType, document,
