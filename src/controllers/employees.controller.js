@@ -55,7 +55,7 @@ const updateMiPerfil = async (req, res) => {
 };
 
 // ======================================================
-// GET DISPONIBLES (empleados con horario en una fecha)
+// GET DISPONIBLES (empleados con horario en una fecha, sin novedades aprobadas)
 // ======================================================
 const getDisponibles = async (req, res) => {
   try {
@@ -74,14 +74,32 @@ const getDisponibles = async (req, res) => {
       include: { empleado: true },
     });
 
+    // IDs de empleados con novedad aprobada que cubre esta fecha
+    // La novedad cubre la fecha si: fechaInicio <= fecha <= fechaFinal
+    const novedadesAprobadas = await prisma.novedad.findMany({
+      where: {
+        estado:      "aprobada",
+        fechaInicio: { lte: fechaLocal },
+        fechaFinal:  { gte: fechaLocal },
+      },
+      include: {
+        horario: { select: { empleadoId: true } },
+      },
+    });
+
+    const empleadosConNovedad = new Set(
+      novedadesAprobadas.map(n => n.horario.empleadoId)
+    );
+
     const COLORS = ["#78D1BD","#A78BFA","#60A5FA","#FBBF24","#F87171","#34D399","#FB923C","#E879F9"];
 
-    // Deduplicar por empleado y filtrar activos
+    // Deduplicar por empleado, filtrar activos y excluir los que tienen novedad aprobada
     const seen = new Set();
     const empleados = [];
     horarios.forEach((h, idx) => {
       if (!h.empleado || h.empleado.estado !== "Activo") return;
       if (seen.has(h.empleadoId)) return;
+      if (empleadosConNovedad.has(h.empleadoId)) return; // ← excluir por novedad
       seen.add(h.empleadoId);
       empleados.push({
         id:        String(h.empleado.id),
@@ -89,7 +107,6 @@ const getDisponibles = async (req, res) => {
         specialty: h.empleado.especialidad ?? "",
         color:     COLORS[idx % COLORS.length],
         isActive:  true,
-        // Rango de horario del día
         horaInicio: h.horaInicio.toISOString().slice(11, 16),
         horaFinal:  h.horaFinal.toISOString().slice(11, 16),
       });
