@@ -24,8 +24,12 @@ const login = async (req, res) => {
       },
     });
 
-    if (!usuario || usuario.estado !== "Activo")
+    if (!usuario)
       return res.status(401).json({ error: "Credenciales incorrectas" });
+
+    // Validar si el usuario está inhabilitado
+    if (usuario.estado !== "Activo")
+      return res.status(403).json({ error: "Tu cuenta está inhabilitada. Contacta al administrador para más información." });
 
     const valida = await bcrypt.compare(contrasena, usuario.contrasena);
     if (!valida)

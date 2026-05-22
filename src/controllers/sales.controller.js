@@ -136,4 +136,14 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, getAvailableAppointments, create, remove };
+const getMonthlyStats = async (req, res) => {
+  try {
+    const stats = await salesModel.getMonthlyStats();
+    res.json(stats);
+  } catch (err) {
+    console.error("Error obteniendo estadísticas mensuales:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getAll, getOne, getAvailableAppointments, create, remove, getMonthlyStats };

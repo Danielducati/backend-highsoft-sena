@@ -7,6 +7,15 @@ function formatUser(u, cliente = null) {
   const isEmpleado = !!u.empleado;
   const perfil     = isEmpleado ? u.empleado : cliente;
 
+  // Combinar foto: priorizar Usuario, luego Cliente, luego Empleado
+  let photo = u.foto_perfil;
+  if (!photo && cliente?.foto_perfil) {
+    photo = cliente.foto_perfil;
+  }
+  if (!photo && perfil?.fotoPerfil) {
+    photo = perfil.fotoPerfil;
+  }
+
   return {
     id:           u.id,
     email:        u.correo,
@@ -20,7 +29,7 @@ function formatUser(u, cliente = null) {
     document:     perfil?.numeroDocumento ?? perfil?.numero_documento ?? "",
     role:         u.rol?.nombre          ?? "",
     rolId:        u.rolId,
-    photo:        u.foto_perfil          ?? perfil?.fotoPerfil       ?? perfil?.foto_perfil ?? "",
+    photo:        photo ?? "",
     isActive:     u.estado === "Activo",
     estado:       u.estado,
   };
@@ -140,7 +149,10 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
     if (firstName !== undefined) usuarioData.nombre   = firstName ?? null;
     if (lastName  !== undefined) usuarioData.apellido = lastName  ?? null;
     if (phone     !== undefined) usuarioData.telefono = phone     ?? null;
-    if (photo     !== undefined) usuarioData.foto_perfil = photo;
+    // foto_perfil solo si el campo existe en el schema (puede no estar en producción)
+    if (photo !== undefined && photo !== null) {
+      try { usuarioData.foto_perfil = photo; } catch { /* campo no existe, ignorar */ }
+    }
 
     if (contrasena && contrasena.trim() !== "") {
       const hash = await bcrypt.hash(contrasena.trim(), 10);
@@ -243,9 +255,25 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
 };
 
 const updateStatus = async (id, isActive) => {
-  return prisma.usuario.update({
-    where: { id: Number(id) },
-    data:  { estado: isActive ? "Activo" : "Inactivo" },
+  return prisma.$transaction(async (tx) => {
+    const usuario = await tx.usuario.update({
+      where: { id: Number(id) },
+      data:  { estado: isActive ? "Activo" : "Inactivo" },
+    });
+
+    // Sincronizar estado con el Cliente relacionado (si existe)
+    const cliente = await tx.cliente.findFirst({
+      where: { fk_id_usuario: Number(id) }
+    });
+
+    if (cliente) {
+      await tx.cliente.update({
+        where: { PK_id_cliente: cliente.PK_id_cliente },
+        data:  { Estado: isActive ? "Activo" : "Inactivo" },
+      });
+    }
+
+    return usuario;
   });
 };
 

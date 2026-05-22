@@ -2,7 +2,7 @@
 const prisma = require("../config/prisma");
 const bcrypt = require("bcryptjs");
 
-function formatClient(c) {
+function formatClient(c, usuario = null) {
   // Calcular totalVisits y totalSpent desde relaciones incluidas
   const citas = c.citas ?? [];
   const ventas = c.Venta ?? [];
@@ -19,18 +19,27 @@ function formatClient(c) {
     ? fechas[0].toLocaleDateString("es-CO")
     : "-";
 
+  // Combinar datos de ambas tablas (usar el que tenga información)
+  const nombre = c.nombre || usuario?.nombre || "";
+  const apellido = c.apellido || usuario?.apellido || "";
+  const telefono = c.telefono || usuario?.telefono || "";
+  // Para la foto, priorizar la del Cliente si existe, sino la del Usuario
+  const fotoPerfil = c.foto_perfil || usuario?.foto_perfil || "";
+  // Para el estado, usar el del Cliente (es la fuente de verdad para el módulo de clientes)
+  const estado = c.Estado;
+
   return {
     id:               c.PK_id_cliente,
-    firstName:        c.nombre,
-    lastName:         c.apellido,
-    name:             `${c.nombre} ${c.apellido}`,
+    firstName:        nombre,
+    lastName:         apellido,
+    name:             `${nombre} ${apellido}`,
     email:            c.correo          ?? "",
-    phone:            c.telefono        ?? "",
+    phone:            telefono          ?? "",
     address:          c.direccion       ?? "",
     tipo_documento:   c.tipo_documento  ?? "",
     numero_documento: c.numero_documento ?? "",
-    image:            c.foto_perfil     ?? "",
-    isActive:         c.Estado === "Activo",
+    image:            fotoPerfil        ?? "",
+    isActive:         estado === "Activo",
     totalVisits,
     totalSpent,
     lastVisit,
@@ -43,20 +52,82 @@ const INCLUDE_STATS = {
 };
 
 const getAll = async ({ soloActivos = false } = {}) => {
-  const clientes = await prisma.cliente.findMany({
-    where:   soloActivos ? { Estado: "Activo" } : {},
-    orderBy: { nombre: "asc" },
-    include: INCLUDE_STATS,
+  console.log(`[clientsModel.getAll] soloActivos=${soloActivos}`);
+  
+  // Obtener todos los usuarios con rol "Cliente" (sin filtrar por estado aquí)
+  const usuarios = await prisma.usuario.findMany({
+    where: {
+      rol: { nombre: "Cliente" },
+    },
+    include: {
+      rol: true,
+      Cliente: true,
+    },
+    orderBy: { id: "desc" },
   });
-  return clientes.map(formatClient);
+
+  console.log(`[clientsModel.getAll] Encontrados ${usuarios.length} usuarios con rol Cliente`);
+
+  // Para cada usuario, obtener o crear su perfil de cliente con estadísticas
+  const clientes = await Promise.all(
+    usuarios.map(async (usuario) => {
+      let cliente = usuario.Cliente?.[0];
+      
+      // Si el usuario no tiene perfil de cliente, crearlo automáticamente
+      if (!cliente) {
+        cliente = await prisma.cliente.create({
+          data: {
+            nombre:           usuario.nombre || usuario.correo.split("@")[0],
+            apellido:         usuario.apellido || "",
+            tipo_documento:   null,
+            numero_documento: null,
+            correo:           usuario.correo,
+            telefono:         usuario.telefono || null,
+            direccion:        null,
+            foto_perfil:      usuario.foto_perfil || "",
+            Estado:           usuario.estado,
+            fk_id_usuario:    usuario.id,
+          },
+        });
+      }
+
+      // Obtener el cliente con estadísticas
+      const clienteConStats = await prisma.cliente.findUnique({
+        where: { PK_id_cliente: cliente.PK_id_cliente },
+        include: INCLUDE_STATS,
+      });
+
+      return { cliente: clienteConStats, usuario };
+    })
+  );
+
+  // Filtrar por estado del Cliente (no del Usuario) si soloActivos es true
+  let resultado = clientes.filter(item => item.cliente);
+  
+  console.log(`[clientsModel.getAll] Antes de filtrar por estado: ${resultado.length} clientes`);
+  
+  if (soloActivos) {
+    resultado = resultado.filter(item => item.cliente.Estado === "Activo");
+    console.log(`[clientsModel.getAll] Después de filtrar solo activos: ${resultado.length} clientes`);
+  }
+
+  // Formatear, combinando datos de ambas tablas
+  return resultado.map(item => formatClient(item.cliente, item.usuario));
 };
 
 const getById = async (id) => {
   const c = await prisma.cliente.findUnique({
     where:   { PK_id_cliente: Number(id) },
-    include: INCLUDE_STATS,
+    include: {
+      ...INCLUDE_STATS,
+      Usuarios: true,
+    },
   });
-  return c ? formatClient(c) : null;
+  
+  if (!c) return null;
+  
+  // Pasar el usuario para priorizar sus datos
+  return formatClient(c, c.Usuarios);
 };
 
 const create = async ({ firstName, lastName, documentType, document,
@@ -127,33 +198,71 @@ const update = async (id, { firstName, lastName, documentType, document,
     }
   }
 
-  const updateData = {
-    nombre:           firstName,
-    apellido:         lastName,
-    tipo_documento:   documentType ?? null,
-    numero_documento: document     ?? null,
-    correo:           email        ?? null,
-    telefono:         phone        ?? null,
-    direccion:        address      ?? null,
-    Estado:           estado       ?? "Activo",
-  };
+  return prisma.$transaction(async (tx) => {
+    const updateData = {
+      nombre:           firstName,
+      apellido:         lastName,
+      tipo_documento:   documentType ?? null,
+      numero_documento: document     ?? null,
+      correo:           email        ?? null,
+      telefono:         phone        ?? null,
+      direccion:        address      ?? null,
+      Estado:           estado       ?? "Activo",
+    };
 
-  if (image !== undefined && image !== null && image !== "") {
-    updateData.foto_perfil = image;
-  }
+    if (image !== undefined && image !== null && image !== "") {
+      updateData.foto_perfil = image;
+    }
 
-  const c = await prisma.cliente.update({
-    where: { PK_id_cliente: clienteId },
-    data:  updateData,
-    include: INCLUDE_STATS,
+    const c = await tx.cliente.update({
+      where: { PK_id_cliente: clienteId },
+      data:  updateData,
+      include: INCLUDE_STATS,
+    });
+
+    // Sincronizar cambios con el Usuario relacionado
+    if (c.fk_id_usuario) {
+      const usuarioUpdateData = {};
+      
+      if (firstName !== undefined) usuarioUpdateData.nombre = firstName;
+      if (lastName !== undefined) usuarioUpdateData.apellido = lastName;
+      if (phone !== undefined) usuarioUpdateData.telefono = phone;
+      if (email !== undefined) usuarioUpdateData.correo = email;
+      if (image !== undefined && image !== null && image !== "") {
+        usuarioUpdateData.foto_perfil = image;
+      }
+      if (estado !== undefined) {
+        usuarioUpdateData.estado = estado;
+      }
+
+      if (Object.keys(usuarioUpdateData).length > 0) {
+        await tx.usuario.update({
+          where: { id: c.fk_id_usuario },
+          data: usuarioUpdateData,
+        });
+      }
+    }
+
+    return formatClient(c);
   });
-  return formatClient(c);
 };
 
 const setStatus = async (id, isActive) => {
-  return prisma.cliente.update({
-    where: { PK_id_cliente: Number(id) },
-    data:  { Estado: isActive ? "Activo" : "Inactivo" },
+  return prisma.$transaction(async (tx) => {
+    const cliente = await tx.cliente.update({
+      where: { PK_id_cliente: Number(id) },
+      data:  { Estado: isActive ? "Activo" : "Inactivo" },
+    });
+
+    // Sincronizar estado con el Usuario relacionado
+    if (cliente.fk_id_usuario) {
+      await tx.usuario.update({
+        where: { id: cliente.fk_id_usuario },
+        data:  { estado: isActive ? "Activo" : "Inactivo" },
+      });
+    }
+
+    return cliente;
   });
 };
 
