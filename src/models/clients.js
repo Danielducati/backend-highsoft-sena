@@ -52,6 +52,8 @@ const INCLUDE_STATS = {
 };
 
 const getAll = async ({ soloActivos = false } = {}) => {
+  console.log(`[clientsModel.getAll] soloActivos=${soloActivos}`);
+  
   // Obtener todos los usuarios con rol "Cliente" (sin filtrar por estado aquí)
   const usuarios = await prisma.usuario.findMany({
     where: {
@@ -63,6 +65,8 @@ const getAll = async ({ soloActivos = false } = {}) => {
     },
     orderBy: { id: "desc" },
   });
+
+  console.log(`[clientsModel.getAll] Encontrados ${usuarios.length} usuarios con rol Cliente`);
 
   // Para cada usuario, obtener o crear su perfil de cliente con estadísticas
   const clientes = await Promise.all(
@@ -100,8 +104,11 @@ const getAll = async ({ soloActivos = false } = {}) => {
   // Filtrar por estado del Cliente (no del Usuario) si soloActivos es true
   let resultado = clientes.filter(item => item.cliente);
   
+  console.log(`[clientsModel.getAll] Antes de filtrar por estado: ${resultado.length} clientes`);
+  
   if (soloActivos) {
     resultado = resultado.filter(item => item.cliente.Estado === "Activo");
+    console.log(`[clientsModel.getAll] Después de filtrar solo activos: ${resultado.length} clientes`);
   }
 
   // Formatear, combinando datos de ambas tablas

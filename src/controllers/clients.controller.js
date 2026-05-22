@@ -4,9 +4,17 @@ const prisma       = require("../config/prisma");
 
 const getAll = async (req, res) => {
   try {
-    const soloActivos = req.query.all !== "true";
-    res.json(await clientsModel.getAll({ soloActivos }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    // Por defecto, mostrar TODOS los clientes (activos e inactivos)
+    // Solo si se envía ?activos=true, mostrar solo activos
+    const soloActivos = req.query.activos === "true";
+    console.log(`[clients.getAll] activos=${req.query.activos}, soloActivos=${soloActivos}`);
+    const clientes = await clientsModel.getAll({ soloActivos });
+    console.log(`[clients.getAll] Devolviendo ${clientes.length} clientes`);
+    res.json(clientes);
+  } catch (err) { 
+    console.error("[clients.getAll] Error:", err);
+    res.status(500).json({ error: err.message }); 
+  }
 };
 
 // Devuelve el perfil del cliente logueado (sin necesitar permiso clientes.ver)
