@@ -174,7 +174,9 @@ const getMisServicios = async (req, res) => {
 // ======================================================
 const getAll = async (req, res) => {
   try {
-    const soloActivos = req.query.all !== "true";
+    // Por defecto, mostrar TODOS los empleados (activos e inactivos)
+    // Solo si se envía ?activos=true, mostrar solo activos
+    const soloActivos = req.query.activos === "true";
     const data = await employeesModel.getAll({ soloActivos });
     res.json(data);
   } catch (err) {
