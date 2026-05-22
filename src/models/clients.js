@@ -43,12 +43,31 @@ const INCLUDE_STATS = {
 };
 
 const getAll = async ({ soloActivos = false } = {}) => {
-  const clientes = await prisma.cliente.findMany({
-    where:   soloActivos ? { Estado: "Activo" } : {},
-    orderBy: { nombre: "asc" },
-    include: INCLUDE_STATS,
+  // Obtener todos los usuarios con rol "Cliente"
+  const usuarios = await prisma.usuario.findMany({
+    where: {
+      rol: { nombre: "Cliente" },
+      ...(soloActivos ? { estado: "Activo" } : {}),
+    },
+    include: {
+      rol: true,
+    },
+    orderBy: { id: "desc" },
   });
-  return clientes.map(formatClient);
+
+  // Para cada usuario, obtener su perfil de cliente
+  const clientes = await Promise.all(
+    usuarios.map(async (usuario) => {
+      const cliente = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: usuario.id },
+        include: INCLUDE_STATS,
+      });
+      return cliente;
+    })
+  );
+
+  // Filtrar clientes que existen y formatear
+  return clientes.filter(Boolean).map(formatClient);
 };
 
 const getById = async (id) => {
