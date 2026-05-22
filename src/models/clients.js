@@ -43,22 +43,54 @@ const INCLUDE_STATS = {
 };
 
 const getAll = async ({ soloActivos = false } = {}) => {
-  // Obtener todos los clientes con su usuario relacionado
-  const clientes = await prisma.cliente.findMany({
-    where: soloActivos ? { Estado: "Activo" } : {},
-    include: {
-      ...INCLUDE_STATS,
-      Usuarios: {
-        include: { rol: true }
-      }
+  // Obtener todos los usuarios con rol "Cliente"
+  const usuarios = await prisma.usuario.findMany({
+    where: {
+      rol: { nombre: "Cliente" },
+      ...(soloActivos ? { estado: "Activo" } : {}),
     },
-    orderBy: { nombre: "asc" },
+    include: {
+      rol: true,
+      Cliente: true,
+    },
+    orderBy: { id: "desc" },
   });
 
-  // Filtrar solo los que tienen rol "Cliente" en su usuario
-  return clientes
-    .filter(c => c.Usuarios?.rol?.nombre === "Cliente")
-    .map(formatClient);
+  // Para cada usuario, obtener o crear su perfil de cliente con estadísticas
+  const clientes = await Promise.all(
+    usuarios.map(async (usuario) => {
+      let cliente = usuario.Cliente?.[0];
+      
+      // Si el usuario no tiene perfil de cliente, crearlo automáticamente
+      if (!cliente) {
+        cliente = await prisma.cliente.create({
+          data: {
+            nombre:           usuario.nombre || usuario.correo.split("@")[0],
+            apellido:         usuario.apellido || "",
+            tipo_documento:   null,
+            numero_documento: null,
+            correo:           usuario.correo,
+            telefono:         usuario.telefono || null,
+            direccion:        null,
+            foto_perfil:      usuario.foto_perfil || "",
+            Estado:           usuario.estado,
+            fk_id_usuario:    usuario.id,
+          },
+        });
+      }
+
+      // Obtener el cliente con estadísticas
+      const clienteConStats = await prisma.cliente.findUnique({
+        where: { PK_id_cliente: cliente.PK_id_cliente },
+        include: INCLUDE_STATS,
+      });
+
+      return clienteConStats;
+    })
+  );
+
+  // Filtrar y formatear
+  return clientes.filter(Boolean).map(formatClient);
 };
 
 const getById = async (id) => {
