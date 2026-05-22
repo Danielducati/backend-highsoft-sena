@@ -92,19 +92,29 @@ const create = async (req, res) => {
       cliente = clienteRecord.PK_id_cliente;
     }
 
-    // Si es empleado, forzar su propio empleadoId en todos los servicios
+    // Si es empleado, puede crear citas para cualquier cliente
+    // pero debe especificar un cliente válido
     if (rolNormCreate === "empleado") {
-      const empRecord = await prisma.empleado.findFirst({
-        where: { usuarioId: req.usuario.id },
-        select: { id: true }
+      if (!cliente) {
+        return res.status(400).json({ 
+          error: "Debes seleccionar un cliente para la cita" 
+        });
+      }
+      
+      // Verificar que el cliente existe
+      const clienteExists = await prisma.cliente.findUnique({
+        where: { PK_id_cliente: Number(cliente) },
+        select: { PK_id_cliente: true }
       });
-      if (!empRecord) {
-        return res.status(400).json({ error: "No se encontró un perfil de empleado asociado a tu cuenta." });
+      
+      if (!clienteExists) {
+        return res.status(400).json({ 
+          error: "El cliente seleccionado no existe" 
+        });
       }
-      // Sobreescribir el empleado en cada servicio con el empleado logueado
-      if (Array.isArray(servicios)) {
-        servicios = servicios.map(s => ({ ...s, empleado_usuario: empRecord.id }));
-      }
+
+      // El empleado puede asignar servicios a cualquier empleado (incluyéndose a sí mismo)
+      // No forzamos su propio empleadoId, dejamos que elija
     }
 
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {
