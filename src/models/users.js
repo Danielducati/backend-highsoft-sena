@@ -246,9 +246,25 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
 };
 
 const updateStatus = async (id, isActive) => {
-  return prisma.usuario.update({
-    where: { id: Number(id) },
-    data:  { estado: isActive ? "Activo" : "Inactivo" },
+  return prisma.$transaction(async (tx) => {
+    const usuario = await tx.usuario.update({
+      where: { id: Number(id) },
+      data:  { estado: isActive ? "Activo" : "Inactivo" },
+    });
+
+    // Sincronizar estado con el Cliente relacionado (si existe)
+    const cliente = await tx.cliente.findFirst({
+      where: { fk_id_usuario: Number(id) }
+    });
+
+    if (cliente) {
+      await tx.cliente.update({
+        where: { PK_id_cliente: cliente.PK_id_cliente },
+        data:  { Estado: isActive ? "Activo" : "Inactivo" },
+      });
+    }
+
+    return usuario;
   });
 };
 

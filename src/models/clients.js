@@ -43,31 +43,22 @@ const INCLUDE_STATS = {
 };
 
 const getAll = async ({ soloActivos = false } = {}) => {
-  // Obtener todos los usuarios con rol "Cliente"
-  const usuarios = await prisma.usuario.findMany({
-    where: {
-      rol: { nombre: "Cliente" },
-      ...(soloActivos ? { estado: "Activo" } : {}),
-    },
+  // Obtener todos los clientes con su usuario relacionado
+  const clientes = await prisma.cliente.findMany({
+    where: soloActivos ? { Estado: "Activo" } : {},
     include: {
-      rol: true,
+      ...INCLUDE_STATS,
+      Usuarios: {
+        include: { rol: true }
+      }
     },
-    orderBy: { id: "desc" },
+    orderBy: { nombre: "asc" },
   });
 
-  // Para cada usuario, obtener su perfil de cliente
-  const clientes = await Promise.all(
-    usuarios.map(async (usuario) => {
-      const cliente = await prisma.cliente.findFirst({
-        where: { fk_id_usuario: usuario.id },
-        include: INCLUDE_STATS,
-      });
-      return cliente;
-    })
-  );
-
-  // Filtrar clientes que existen y formatear
-  return clientes.filter(Boolean).map(formatClient);
+  // Filtrar solo los que tienen rol "Cliente" en su usuario
+  return clientes
+    .filter(c => c.Usuarios?.rol?.nombre === "Cliente")
+    .map(formatClient);
 };
 
 const getById = async (id) => {
@@ -146,33 +137,71 @@ const update = async (id, { firstName, lastName, documentType, document,
     }
   }
 
-  const updateData = {
-    nombre:           firstName,
-    apellido:         lastName,
-    tipo_documento:   documentType ?? null,
-    numero_documento: document     ?? null,
-    correo:           email        ?? null,
-    telefono:         phone        ?? null,
-    direccion:        address      ?? null,
-    Estado:           estado       ?? "Activo",
-  };
+  return prisma.$transaction(async (tx) => {
+    const updateData = {
+      nombre:           firstName,
+      apellido:         lastName,
+      tipo_documento:   documentType ?? null,
+      numero_documento: document     ?? null,
+      correo:           email        ?? null,
+      telefono:         phone        ?? null,
+      direccion:        address      ?? null,
+      Estado:           estado       ?? "Activo",
+    };
 
-  if (image !== undefined && image !== null && image !== "") {
-    updateData.foto_perfil = image;
-  }
+    if (image !== undefined && image !== null && image !== "") {
+      updateData.foto_perfil = image;
+    }
 
-  const c = await prisma.cliente.update({
-    where: { PK_id_cliente: clienteId },
-    data:  updateData,
-    include: INCLUDE_STATS,
+    const c = await tx.cliente.update({
+      where: { PK_id_cliente: clienteId },
+      data:  updateData,
+      include: INCLUDE_STATS,
+    });
+
+    // Sincronizar cambios con el Usuario relacionado
+    if (c.fk_id_usuario) {
+      const usuarioUpdateData = {};
+      
+      if (firstName !== undefined) usuarioUpdateData.nombre = firstName;
+      if (lastName !== undefined) usuarioUpdateData.apellido = lastName;
+      if (phone !== undefined) usuarioUpdateData.telefono = phone;
+      if (email !== undefined) usuarioUpdateData.correo = email;
+      if (image !== undefined && image !== null && image !== "") {
+        usuarioUpdateData.foto_perfil = image;
+      }
+      if (estado !== undefined) {
+        usuarioUpdateData.estado = estado;
+      }
+
+      if (Object.keys(usuarioUpdateData).length > 0) {
+        await tx.usuario.update({
+          where: { id: c.fk_id_usuario },
+          data: usuarioUpdateData,
+        });
+      }
+    }
+
+    return formatClient(c);
   });
-  return formatClient(c);
 };
 
 const setStatus = async (id, isActive) => {
-  return prisma.cliente.update({
-    where: { PK_id_cliente: Number(id) },
-    data:  { Estado: isActive ? "Activo" : "Inactivo" },
+  return prisma.$transaction(async (tx) => {
+    const cliente = await tx.cliente.update({
+      where: { PK_id_cliente: Number(id) },
+      data:  { Estado: isActive ? "Activo" : "Inactivo" },
+    });
+
+    // Sincronizar estado con el Usuario relacionado
+    if (cliente.fk_id_usuario) {
+      await tx.usuario.update({
+        where: { id: cliente.fk_id_usuario },
+        data:  { estado: isActive ? "Activo" : "Inactivo" },
+      });
+    }
+
+    return cliente;
   });
 };
 
