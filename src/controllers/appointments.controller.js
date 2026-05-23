@@ -10,9 +10,11 @@ const getAll = async (req, res) => {
     let empleadoId = null;
 
     const rol = (req.usuario?.rol ?? "").toLowerCase();
+    console.log("📋 [GET ALL APPOINTMENTS] Rol del usuario:", rol);
 
     // Si es un rol de empleado (cualquier rol que no sea Admin o Cliente)
     const esEmpleado = !["admin", "administrador", "cliente"].includes(rol);
+    console.log("📋 [GET ALL APPOINTMENTS] Es empleado:", esEmpleado);
     
     if (esEmpleado) {
       // Filtrar solo las citas donde este empleado está asignado
@@ -20,21 +22,31 @@ const getAll = async (req, res) => {
         where: { usuarioId: req.usuario.id },
         select: { id: true }
       });
+      console.log("📋 [GET ALL APPOINTMENTS] Registro de empleado:", empRecord);
       if (empRecord) empleadoId = empRecord.id;
+      console.log("📋 [GET ALL APPOINTMENTS] EmpleadoId:", empleadoId);
     } else if (!["admin", "administrador"].includes(rol)) {
       // Es cliente
+      console.log("📋 [GET ALL APPOINTMENTS] Es cliente, buscando registro...");
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
       });
-      if (!clienteRecord) return res.json([]);
+      console.log("📋 [GET ALL APPOINTMENTS] Registro de cliente:", clienteRecord);
+      if (!clienteRecord) {
+        console.log("📋 [GET ALL APPOINTMENTS] Cliente no encontrado, devolviendo array vacío");
+        return res.json([]);
+      }
       clienteId = clienteRecord.PK_id_cliente;
     }
 
+    console.log("📋 [GET ALL APPOINTMENTS] Consultando citas con clienteId:", clienteId, "empleadoId:", empleadoId);
     const data = await appointmentsModel.getAll(clienteId, empleadoId);
+    console.log("📋 [GET ALL APPOINTMENTS] Citas encontradas:", data.length);
     res.json(data);
 
   } catch (err) {
+    console.error("❌ [GET ALL APPOINTMENTS] Error:", err);
     res.status(500).json({ error: appointmentErrors.SERVER_ERROR });
   }
 };
