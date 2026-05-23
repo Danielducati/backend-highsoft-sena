@@ -78,7 +78,10 @@ const create = async (req, res) => {
 
     let { cliente, fecha, hora, notas, servicios } = req.body;
 
+    console.log("📝 [CREATE APPOINTMENT] Body recibido:", JSON.stringify({ cliente, fecha, hora, servicios: servicios?.length }, null, 2));
+
     const rolNormCreate = (req.usuario?.rol ?? "").toLowerCase();
+    console.log("👤 [CREATE APPOINTMENT] Rol del usuario:", rolNormCreate);
 
     // Si es cliente, forzar su propio clienteId
     if (!["admin", "administrador", "empleado"].includes(rolNormCreate)) {
@@ -90,28 +93,37 @@ const create = async (req, res) => {
         return res.status(400).json({ error: "No se encontró un perfil de cliente asociado a tu cuenta. Contacta al administrador." });
       }
       cliente = clienteRecord.PK_id_cliente;
+      console.log("✅ [CREATE APPOINTMENT] Cliente (rol cliente):", cliente);
     }
 
     // Si es empleado, puede crear citas para cualquier cliente
     // pero debe especificar un cliente válido
     if (rolNormCreate === "empleado") {
+      console.log("🔍 [CREATE APPOINTMENT] Validando cliente para empleado...");
+      
       if (!cliente) {
+        console.log("❌ [CREATE APPOINTMENT] Cliente no especificado en el body");
         return res.status(400).json({ 
           error: "Debes seleccionar un cliente para la cita" 
         });
       }
       
+      console.log("🔍 [CREATE APPOINTMENT] Verificando que cliente existe:", cliente);
+      
       // Verificar que el cliente existe
       const clienteExists = await prisma.cliente.findUnique({
         where: { PK_id_cliente: Number(cliente) },
-        select: { PK_id_cliente: true }
+        select: { PK_id_cliente: true, nombre: true, apellido: true }
       });
       
       if (!clienteExists) {
+        console.log("❌ [CREATE APPOINTMENT] Cliente no encontrado en BD");
         return res.status(400).json({ 
           error: "El cliente seleccionado no existe" 
         });
       }
+
+      console.log("✅ [CREATE APPOINTMENT] Cliente válido:", `${clienteExists.nombre} ${clienteExists.apellido}`);
 
       // El empleado puede asignar servicios a cualquier empleado (incluyéndose a sí mismo)
       // No forzamos su propio empleadoId, dejamos que elija
