@@ -2,14 +2,21 @@ const nodemailer = require("nodemailer");
 
 // Configuración principal con múltiples opciones de fallback
 const createTransporter = () => {
+  // Limpiar la contraseña — las App Passwords de Gmail pueden tener espacios
+  const emailPass = (process.env.EMAIL_PASSWORD || '').replace(/\s/g, '');
+  const emailUser = (process.env.EMAIL_USER || '').trim();
+
+  console.log(`📧 Configurando email: ${emailUser ? emailUser : '❌ EMAIL_USER no definido'}`);
+  console.log(`🔑 App Password: ${emailPass ? `✅ ${emailPass.length} chars` : '❌ EMAIL_PASSWORD no definido'}`);
+
   // Configuración principal (Gmail con IPv4 forzado)
   const primaryConfig = {
     host: "smtp.gmail.com",
     port: 587,
     secure: false,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
+      user: emailUser,
+      pass: emailPass,
     },
     tls: {
       rejectUnauthorized: false
@@ -28,8 +35,8 @@ const createTransporter = () => {
     port: 465,
     secure: true,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
+      user: emailUser,
+      pass: emailPass,
     },
     tls: {
       rejectUnauthorized: false
@@ -87,9 +94,11 @@ const sendWelcomeEmail = async (to, name) => {
     return false;
   }
 
+  const emailUser = (process.env.EMAIL_USER || '').trim();
+
   try {
     await transporter.sendMail({
-      from: `"Highlife Spa" <${process.env.EMAIL_USER}>`,
+      from: `"Highlife Spa" <${emailUser}>`,
       to,
       subject: "¡Bienvenido a Highlife Spa & Bar!",
       html: `
@@ -152,9 +161,11 @@ const sendResetPasswordEmail = async (to, resetLink) => {
     return false;
   }
 
+  const emailUser = (process.env.EMAIL_USER || '').trim();
+
   try {
     await transporter.sendMail({
-      from: `"Highlife Spa" <${process.env.EMAIL_USER}>`,
+      from: `"Highlife Spa" <${emailUser}>`,
       to,
       subject: "Recupera tu contraseña - Highlife Spa & Bar",
       html: `
