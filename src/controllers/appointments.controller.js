@@ -10,28 +10,43 @@ const getAll = async (req, res) => {
     let empleadoId = null;
 
     const rol = (req.usuario?.rol ?? "").toLowerCase();
+    console.log("📋 [GET ALL APPOINTMENTS] Rol del usuario:", rol);
 
-    if (rol === "empleado") {
+    // Si es un rol de empleado (cualquier rol que no sea Admin o Cliente)
+    const esEmpleado = !["admin", "administrador", "cliente"].includes(rol);
+    console.log("📋 [GET ALL APPOINTMENTS] Es empleado:", esEmpleado);
+    
+    if (esEmpleado) {
       // Filtrar solo las citas donde este empleado está asignado
       const empRecord = await prisma.empleado.findFirst({
         where: { usuarioId: req.usuario.id },
         select: { id: true }
       });
+      console.log("📋 [GET ALL APPOINTMENTS] Registro de empleado:", empRecord);
       if (empRecord) empleadoId = empRecord.id;
+      console.log("📋 [GET ALL APPOINTMENTS] EmpleadoId:", empleadoId);
     } else if (!["admin", "administrador"].includes(rol)) {
       // Es cliente
+      console.log("📋 [GET ALL APPOINTMENTS] Es cliente, buscando registro...");
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
       });
-      if (!clienteRecord) return res.json([]);
+      console.log("📋 [GET ALL APPOINTMENTS] Registro de cliente:", clienteRecord);
+      if (!clienteRecord) {
+        console.log("📋 [GET ALL APPOINTMENTS] Cliente no encontrado, devolviendo array vacío");
+        return res.json([]);
+      }
       clienteId = clienteRecord.PK_id_cliente;
     }
 
+    console.log("📋 [GET ALL APPOINTMENTS] Consultando citas con clienteId:", clienteId, "empleadoId:", empleadoId);
     const data = await appointmentsModel.getAll(clienteId, empleadoId);
+    console.log("📋 [GET ALL APPOINTMENTS] Citas encontradas:", data.length);
     res.json(data);
 
   } catch (err) {
+    console.error("❌ [GET ALL APPOINTMENTS] Error:", err);
     res.status(500).json({ error: appointmentErrors.SERVER_ERROR });
   }
 };
@@ -52,9 +67,11 @@ const getOne = async (req, res) => {
       return res.status(404).json({ error: appointmentErrors.NOT_FOUND });
     }
 
-    // Si es Cliente (cualquier rol no admin/empleado), verificar que la cita le pertenece
+    // Si es Cliente, verificar que la cita le pertenece
     const rolNorm = (req.usuario?.rol ?? "").toLowerCase();
-    if (!["admin", "administrador", "empleado"].includes(rolNorm)) {
+    const esCliente = rolNorm === "cliente";
+    
+    if (esCliente) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
@@ -80,11 +97,21 @@ const create = async (req, res) => {
 
     console.log("📝 [CREATE APPOINTMENT] Body recibido:", JSON.stringify({ cliente, fecha, hora, servicios: servicios?.length }, null, 2));
 
+    // Validación temprana del cliente
+    if (!cliente || cliente === 0 || isNaN(Number(cliente))) {
+      console.log("❌ [CREATE APPOINTMENT] Cliente inválido o faltante:", cliente);
+      return res.status(400).json({ 
+        error: "El campo 'cliente' es requerido y debe ser un número válido mayor que 0" 
+      });
+    }
+
     const rolNormCreate = (req.usuario?.rol ?? "").toLowerCase();
     console.log("👤 [CREATE APPOINTMENT] Rol del usuario:", rolNormCreate);
 
     // Si es cliente, forzar su propio clienteId
-    if (!["admin", "administrador", "empleado"].includes(rolNormCreate)) {
+    const esCliente = rolNormCreate === "cliente";
+    
+    if (esCliente) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
@@ -96,9 +123,11 @@ const create = async (req, res) => {
       console.log("✅ [CREATE APPOINTMENT] Cliente (rol cliente):", cliente);
     }
 
-    // Si es empleado, puede crear citas para cualquier cliente
+    // Si es empleado (cualquier rol que no sea Admin o Cliente), puede crear citas para cualquier cliente
     // pero debe especificar un cliente válido
-    if (rolNormCreate === "empleado") {
+    const esEmpleado = !["admin", "administrador", "cliente"].includes(rolNormCreate);
+    
+    if (esEmpleado) {
       console.log("🔍 [CREATE APPOINTMENT] Validando cliente para empleado...");
       
       if (!cliente) {
@@ -130,34 +159,46 @@ const create = async (req, res) => {
     }
 
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {
+      console.log("❌ [CREATE APPOINTMENT] Campos requeridos faltantes");
       return res.status(400).json({
         error: appointmentErrors.REQUIRED_FIELDS
       });
     }
 
+    console.log("✅ [CREATE APPOINTMENT] Campos requeridos presentes");
+
     if (isNaN(Date.parse(fecha))) {
+      console.log("❌ [CREATE APPOINTMENT] Formato de fecha inválido:", fecha);
       return res.status(400).json({
         error: appointmentErrors.INVALID_DATE_FORMAT
       });
     }
 
+    console.log("✅ [CREATE APPOINTMENT] Formato de fecha válido");
+
     const horaRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
     if (!horaRegex.test(hora)) {
+      console.log("❌ [CREATE APPOINTMENT] Formato de hora inválido:", hora);
       return res.status(400).json({
         error: appointmentErrors.INVALID_TIME_FORMAT
       });
     }
+
+    console.log("✅ [CREATE APPOINTMENT] Formato de hora válido");
 
     const hoyStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/Bogota"
     });
 
     if (fecha < hoyStr) {
+      console.log("❌ [CREATE APPOINTMENT] Fecha en el pasado:", fecha, "< ", hoyStr);
       return res.status(400).json({
         error: appointmentErrors.PAST_DATE
       });
     }
+
+    console.log("✅ [CREATE APPOINTMENT] Fecha no está en el pasado");
 
     // Extraer empleados únicos del array de servicios
     const empleadoIds = [
@@ -168,27 +209,34 @@ const create = async (req, res) => {
       )
     ];
 
+    console.log("📋 [CREATE APPOINTMENT] Empleados a validar:", empleadoIds);
+
     // Validar que cada empleado tiene horario registrado en esa fecha
     if (empleadoIds.length > 0) {
       const [y, m, d] = fecha.split("-").map(Number);
       const fechaLocal = new Date(Date.UTC(y, m - 1, d));
+      console.log("📋 [CREATE APPOINTMENT] Fecha local para validación:", fechaLocal);
 
       for (const empId of empleadoIds) {
         const horario = await prisma.horario.findFirst({
           where: { empleadoId: empId, fecha: fechaLocal },
         });
+        console.log(`📋 [CREATE APPOINTMENT] Horario para empleado ${empId}:`, horario ? "Encontrado" : "No encontrado");
         if (!horario) {
           const emp = await prisma.empleado.findUnique({
             where: { id: empId },
             select: { nombre: true, apellido: true },
           });
           const nombre = emp ? `${emp.nombre} ${emp.apellido}` : `Empleado #${empId}`;
+          console.log(`❌ [CREATE APPOINTMENT] ${nombre} no tiene horario para ${fecha}`);
           return res.status(400).json({
             error: `${nombre} no tiene horario registrado para el ${fecha}`,
           });
         }
       }
     }
+
+    console.log("✅ [CREATE APPOINTMENT] Todos los empleados tienen horario");
 
     // ── Validar disponibilidad de empleados (novedades y solapamientos) ──
     if (empleadoIds.length > 0) {
@@ -201,12 +249,16 @@ const create = async (req, res) => {
           servicioId: Number(s.servicio),
         }));
 
+      console.log("📋 [CREATE APPOINTMENT] Validando disponibilidad para:", asignaciones);
+
       // Validar novedades
       const availabilityCheck = await checkMultipleEmployeesAvailability(
         asignaciones,
         fecha,
         hora
       );
+
+      console.log("📋 [CREATE APPOINTMENT] Resultado de validación de disponibilidad:", availabilityCheck);
 
       if (!availabilityCheck.available) {
         const conflict = availabilityCheck.conflicts[0];

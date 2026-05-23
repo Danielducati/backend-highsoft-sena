@@ -259,6 +259,7 @@ const updateStatus = async (id, isActive) => {
     const usuario = await tx.usuario.update({
       where: { id: Number(id) },
       data:  { estado: isActive ? "Activo" : "Inactivo" },
+      include: { rol: true },
     });
 
     // Sincronizar estado con el Cliente relacionado (si existe)
@@ -270,6 +271,18 @@ const updateStatus = async (id, isActive) => {
       await tx.cliente.update({
         where: { PK_id_cliente: cliente.PK_id_cliente },
         data:  { Estado: isActive ? "Activo" : "Inactivo" },
+      });
+    }
+
+    // Sincronizar estado con el Empleado relacionado (si existe)
+    const empleado = await tx.empleado.findFirst({
+      where: { usuarioId: Number(id) }
+    });
+
+    if (empleado) {
+      await tx.empleado.update({
+        where: { id: empleado.id },
+        data:  { estado: isActive ? "Activo" : "Inactivo" },
       });
     }
 
