@@ -24,8 +24,10 @@ const getAll = async (req, res) => {
     let empleadoId = null;
     const rol = (req.usuario?.rol ?? "").toLowerCase();
 
-    // Si es empleado, filtrar solo sus propias novedades
-    if (rol === "empleado") {
+    // Si es un rol de empleado (cualquier rol que no sea Admin o Cliente)
+    const esEmpleado = !["admin", "administrador", "cliente"].includes(rol);
+    
+    if (esEmpleado) {
       const empRecord = await prisma.empleado.findFirst({
         where: { usuarioId: req.usuario.id },
         select: { id: true }
@@ -54,8 +56,10 @@ const create = async (req, res) => {
 
     const rol = (req.usuario?.rol ?? "").toLowerCase();
 
-    // Si es empleado, forzar su propio empleadoId
-    if (rol === "empleado") {
+    // Si es un rol de empleado (cualquier rol que no sea Admin o Cliente), forzar su propio empleadoId
+    const esEmpleado = !["admin", "administrador", "cliente"].includes(rol);
+    
+    if (esEmpleado) {
       const empRecord = await prisma.empleado.findFirst({
         where: { usuarioId: req.usuario.id },
         select: { id: true }
