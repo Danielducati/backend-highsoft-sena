@@ -48,21 +48,35 @@ const hasPermission = (permission) => async (req, res, next) => {
 if (!req.usuario)
     return res.status(401).json({ error: "No autenticado" });
 
+console.log(`🔐 [hasPermission] Verificando permiso: ${permission}`);
+console.log(`🔐 [hasPermission] Usuario:`, req.usuario);
+console.log(`🔐 [hasPermission] RolId:`, req.usuario.rolId);
+
 try {
     const result = await prisma.rolPermiso.findFirst({
     where: {
         rolId:   req.usuario.rolId,
         permiso: { nombre: permission },
     },
+    include: {
+        permiso: true,
+        rol: true,
+    },
     });
 
-    if (!result)
+    console.log(`🔐 [hasPermission] Resultado de búsqueda:`, result);
+
+    if (!result) {
+    console.log(`❌ [hasPermission] Permiso denegado: ${permission} para rol ${req.usuario.rol}`);
     return res.status(403).json({
         error: `No tienes permiso para realizar esta acción: ${permission}`,
     });
+    }
 
+    console.log(`✅ [hasPermission] Permiso concedido: ${permission}`);
     next();
 } catch (err) {
+    console.error(`❌ [hasPermission] Error:`, err);
     res.status(500).json({ error: err.message });
 }
 };
