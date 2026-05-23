@@ -151,38 +151,86 @@ const update = async (req, res) => {
         console.warn("⚠️ Error guardando historial (continuando con actualización):", historyError.message);
       }
 
-      // 🗑️ PASO 2: Borrar todos los horarios de esa semana para ese empleado
-      const deletedCount = await tx.horario.deleteMany({
+      // 🔍 PASO 2: Obtener horarios existentes de la semana
+      const horariosExistentes = await tx.horario.findMany({
         where: {
           empleadoId: Number(employeeId),
           fecha: { gte: monday, lte: sunday },
         },
       });
 
-      console.log(`📅 Horarios eliminados para historial: ${deletedCount.count} registros`);
+      // Crear un mapa de horarios existentes por fecha
+      const horariosPorFecha = new Map();
+      horariosExistentes.forEach(h => {
+        const fechaISO = h.fecha.toISOString().split("T")[0];
+        if (!horariosPorFecha.has(fechaISO)) {
+          horariosPorFecha.set(fechaISO, []);
+        }
+        horariosPorFecha.get(fechaISO).push(h);
+      });
 
-      // ➕ PASO 3: Recrear con los nuevos datos
+      // 🗑️ PASO 3: Identificar horarios a eliminar (los que NO tienen novedades asociadas)
+      const fechasNuevas = new Set(
+        daySchedules.map(ds => buildFecha(weekStartDate, ds.dayIndex).toISOString().split("T")[0])
+      );
+
+      for (const [fechaISO, horarios] of horariosPorFecha.entries()) {
+        if (!fechasNuevas.has(fechaISO)) {
+          // Esta fecha ya no está en el nuevo horario, intentar eliminar
+          for (const h of horarios) {
+            // Verificar si tiene novedades asociadas
+            const tieneNovedades = await tx.novedad.count({
+              where: { horarioId: h.id },
+            });
+
+            if (tieneNovedades === 0) {
+              // No tiene novedades, se puede eliminar
+              await tx.horario.delete({ where: { id: h.id } });
+              console.log(`🗑️ Horario ${h.id} eliminado (sin novedades)`);
+            } else {
+              console.warn(`⚠️ Horario ${h.id} NO eliminado (tiene ${tieneNovedades} novedades asociadas)`);
+            }
+          }
+        }
+      }
+
+      // ➕ PASO 4: Actualizar o crear horarios según corresponda
       for (const ds of daySchedules) {
         if (ds.startTime >= ds.endTime) throw new Error(scheduleErrors.INVALID_TIME_RANGE);
         if (ds.startTime < OPEN_TIME || ds.endTime > CLOSE_TIME) throw new Error(scheduleErrors.OUTSIDE_WORK_HOURS);
 
-        const fecha     = buildFecha(weekStartDate, ds.dayIndex);
-        const dayOfWeek = fecha.getUTCDay();
-
-        // Domingos permitidos � el spa trabaja los 7 dias
-
+        const fecha = buildFecha(weekStartDate, ds.dayIndex);
+        const fechaISO = fecha.toISOString().split("T")[0];
         const start = toTime(ds.startTime);
-        const end   = toTime(ds.endTime);
+        const end = toTime(ds.endTime);
 
-        await tx.horario.create({
-          data: {
-            empleadoId: Number(employeeId),
-            fecha,
-            horaInicio: start,
-            horaFinal:  end,
-            diaSemana:  fecha.toLocaleDateString("es-ES", { weekday: "long", timeZone: "UTC" }),
-          },
-        });
+        // Buscar si ya existe un horario para esta fecha
+        const horarioExistente = horariosPorFecha.get(fechaISO)?.[0];
+
+        if (horarioExistente) {
+          // Actualizar el horario existente
+          await tx.horario.update({
+            where: { id: horarioExistente.id },
+            data: {
+              horaInicio: start,
+              horaFinal: end,
+              diaSemana: fecha.toLocaleDateString("es-ES", { weekday: "long", timeZone: "UTC" }),
+            },
+          });
+          console.log(`✏️ Horario ${horarioExistente.id} actualizado`);
+        } else {
+          // Crear nuevo horario
+          await tx.horario.create({
+            data: {
+              empleadoId: Number(employeeId),
+              fecha,
+              horaInicio: start,
+              horaFinal: end,
+              diaSemana: fecha.toLocaleDateString("es-ES", { weekday: "long", timeZone: "UTC" }),
+            },
+          });
+          console.log(`➕ Nuevo horario creado para ${fechaISO}`);
+        }
       }
     });
 
