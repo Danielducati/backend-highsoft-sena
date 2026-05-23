@@ -10,10 +10,11 @@ const { verificarToken, soloAdmin }                          = require("../middl
 const { validateCreateUser, validateUpdateUser,
         validateUserId, validateUserStatus }                  = require("../middlewares/validate.middleware");
 
-// ⚠️ rutas fijas antes de /:id
+// ⚠️ rutas fijas ANTES de /:id
 router.get("/roles",        verificarToken,                                              getRoles);
 router.get("/mi-perfil",    verificarToken,                                              getMiPerfil);
-router.put("/mi-perfil",    verificarToken,                                              updateMiPerfil);
+router.patch("/mi-perfil",  verificarToken,                                              updateMiPerfil);
+
 router.get("/",             verificarToken, soloAdmin,                                   getAllUsers);
 router.get("/:id",          verificarToken, soloAdmin, validateUserId,                   getUserById);
 router.post("/",            verificarToken, soloAdmin, validateCreateUser,               createUser);

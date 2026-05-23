@@ -97,7 +97,10 @@ const getMiPerfil = async (req, res) => {
 
 const updateMiPerfil = async (req, res) => {
   try {
-    const result = await usersModel.update(req.usuario.id, req.body);
+    const { firstName, lastName, documentType, document, phone, photo } = req.body;
+    const result = await usersModel.update(req.usuario.id, {
+      firstName, lastName, documentType, document, phone, photo,
+    });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
