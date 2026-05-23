@@ -92,7 +92,7 @@ const create = async (req, res) => {
         const fecha     = buildFecha(weekStartDate, ds.dayIndex);
         const dayOfWeek = fecha.getUTCDay();
 
-        // Domingos permitidos � el spa trabaja los 7 dias
+        // Domingos permitidos � el spa trabaja los 7 dias
 
         const start = toTime(ds.startTime);
         const end   = toTime(ds.endTime);
@@ -169,7 +169,7 @@ const update = async (req, res) => {
         const fecha     = buildFecha(weekStartDate, ds.dayIndex);
         const dayOfWeek = fecha.getUTCDay();
 
-        // Domingos permitidos � el spa trabaja los 7 dias
+        // Domingos permitidos � el spa trabaja los 7 dias
 
         const start = toTime(ds.startTime);
         const end   = toTime(ds.endTime);
@@ -354,13 +354,46 @@ const getAvailableTimeSlots = async (req, res) => {
       orderBy: [{ fecha: "asc" }, { horaInicio: "asc" }],
     });
 
-    // Agrupar por fecha
+    // IDs de empleados con novedad aprobada o activa que cubre algún día de esta semana
+    const novedadesAprobadas = await prisma.novedad.findMany({
+      where: {
+        estado: { in: ["pendiente", "Aprobada", "aprobada", "Activo"] },
+        fechaInicio: { lte: sunday },
+        OR: [
+          { fechaFinal: { gte: monday } },
+          { fechaFinal: null }, // Novedades sin fecha final
+        ],
+      },
+      include: {
+        horario: { select: { empleadoId: true, fecha: true } },
+      },
+    });
+
+    // Mapa: empleadoId → Set de fechas bloqueadas (ISO string YYYY-MM-DD)
+    const fechasBloqueadas = new Map();
+    for (const n of novedadesAprobadas) {
+      const empId = n.horario.empleadoId;
+      if (!fechasBloqueadas.has(empId)) fechasBloqueadas.set(empId, new Set());
+      // Marcar cada día del rango de la novedad
+      const inicio = new Date(n.fechaInicio);
+      const fin    = new Date(n.fechaFinal);
+      for (let dt = new Date(inicio); dt <= fin; dt.setUTCDate(dt.getUTCDate() + 1)) {
+        fechasBloqueadas.get(empId).add(dt.toISOString().split("T")[0]);
+      }
+    }
+
+    // Agrupar por fecha, excluyendo empleados con novedad aprobada ese día
     const slotsByDate = {};
     
     for (const h of horarios) {
       if (h.empleado.estado !== "Activo") continue;
-      
+
       const fechaISO = h.fecha.toISOString().split("T")[0];
+
+      // Excluir si el empleado tiene novedad aprobada en esta fecha
+      const bloqueadas = fechasBloqueadas.get(h.empleadoId);
+      if (bloqueadas && bloqueadas.has(fechaISO)) continue;
+
       if (!slotsByDate[fechaISO]) {
         slotsByDate[fechaISO] = {
           date: fechaISO,
