@@ -5,33 +5,41 @@ const bcrypt = require("bcryptjs");
 const COLORS = ["#78D1BD","#A78BFA","#60A5FA","#FBBF24","#F87171","#34D399","#FB923C","#E879F9"];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-function formatEmployee(emp, idx = 0) {
+function formatEmployee(emp, usuario = null, idx = 0) {
+  // Combinar datos de ambas tablas (usar el que tenga información)
+  const nombre = emp.nombre || usuario?.nombre || "";
+  const apellido = emp.apellido || usuario?.apellido || "";
+  const telefono = emp.telefono || usuario?.telefono || "";
+  // Para la foto, priorizar la del Empleado si existe, sino la del Usuario
+  const fotoPerfil = emp.fotoPerfil || usuario?.foto_perfil || "";
+  // Para el estado, usar el del Empleado (es la fuente de verdad para el módulo de empleados)
+  const estado = emp.estado;
+
   return {
     id:              String(emp.id),
-    name:            `${emp.nombre} ${emp.apellido}`,
-    nombre:          emp.nombre,
-    apellido:        emp.apellido,
+    name:            `${nombre} ${apellido}`,
+    nombre:          nombre,
+    apellido:        apellido,
     specialty:       emp.especialidad ?? "",
     email:           emp.correo       ?? "",
-    phone:           emp.telefono     ?? "",
+    phone:           telefono         ?? "",
     tipoDocumento:   emp.tipoDocumento ?? "",
     numeroDocumento: emp.numeroDocumento ?? "",
     ciudad:          emp.ciudad    ?? "",
     direccion:       emp.direccion ?? "",
-    fotoPerfil:      emp.fotoPerfil ?? "",
-    image:           emp.fotoPerfil      ?? "",  // alias para el frontend
-    image:           emp.fotoPerfil ?? "",
-    estado:          emp.estado,
-    isActive:        emp.estado === "Activo",
+    fotoPerfil:      fotoPerfil    ?? "",
+    image:           fotoPerfil    ?? "",
+    estado:          estado,
+    isActive:        estado === "Activo",
     color:           COLORS[idx % COLORS.length],
   };
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
-const getAll = async ({ soloActivos = true } = {}) => {
+const getAll = async ({ soloActivos = false } = {}) => {
   const empleados = await prisma.empleado.findMany({
     where: {
-      ...(soloActivos ? { estado: "Activo" } : {}),
+      // No filtrar por estado aquí, se filtra después
       // Solo empleados cuyo usuario NO sea Admin ni Cliente
       usuario: {
         rol: {
@@ -42,7 +50,14 @@ const getAll = async ({ soloActivos = true } = {}) => {
     include: { usuario: { include: { rol: true } } },
     orderBy: { nombre: "asc" },
   });
-  return empleados.map(formatEmployee);
+
+  // Filtrar por estado del Empleado si soloActivos es true
+  let resultado = empleados;
+  if (soloActivos) {
+    resultado = empleados.filter(emp => emp.estado === "Activo");
+  }
+
+  return resultado.map((emp, idx) => formatEmployee(emp, emp.usuario, idx));
 };
 
 const getById = async (id) => {
@@ -139,33 +154,68 @@ const update = async (id, data) => {
     }
   }
 
-  const updateData = {};
+  return prisma.$transaction(async (tx) => {
+    const updateData = {};
 
-  if (data.nombre          !== undefined) updateData.nombre          = data.nombre;
-  if (data.apellido        !== undefined) updateData.apellido        = data.apellido;
-  if (data.tipoDocumento   !== undefined) updateData.tipoDocumento   = data.tipoDocumento;
-  if (data.numeroDocumento !== undefined) updateData.numeroDocumento = data.numeroDocumento;
-  // correo no se actualiza aquí para mantener consistencia con la tabla Usuarios
-  if (data.telefono        !== undefined) updateData.telefono        = data.telefono;
-  if (data.ciudad          !== undefined) updateData.ciudad          = data.ciudad;
-  if (data.especialidad    !== undefined) updateData.especialidad    = data.especialidad;
-  if (data.direccion       !== undefined) updateData.direccion       = data.direccion;
-  if (data.fotoPerfil      !== undefined) updateData.fotoPerfil      = data.fotoPerfil;
-  if (data.estado          !== undefined) updateData.estado          = data.estado;
+    if (data.nombre          !== undefined) updateData.nombre          = data.nombre;
+    if (data.apellido        !== undefined) updateData.apellido        = data.apellido;
+    if (data.tipoDocumento   !== undefined) updateData.tipoDocumento   = data.tipoDocumento;
+    if (data.numeroDocumento !== undefined) updateData.numeroDocumento = data.numeroDocumento;
+    if (data.telefono        !== undefined) updateData.telefono        = data.telefono;
+    if (data.ciudad          !== undefined) updateData.ciudad          = data.ciudad;
+    if (data.especialidad    !== undefined) updateData.especialidad    = data.especialidad;
+    if (data.direccion       !== undefined) updateData.direccion       = data.direccion;
+    if (data.fotoPerfil      !== undefined) updateData.fotoPerfil      = data.fotoPerfil;
+    if (data.estado          !== undefined) updateData.estado          = data.estado;
 
-  const emp = await prisma.empleado.update({
-    where: { id: empId },
-    data:  updateData,
+    const emp = await tx.empleado.update({
+      where: { id: empId },
+      data:  updateData,
+    });
+
+    // Sincronizar cambios con el Usuario relacionado
+    if (emp.usuarioId) {
+      const usuarioUpdateData = {};
+      
+      if (data.nombre !== undefined) usuarioUpdateData.nombre = data.nombre;
+      if (data.apellido !== undefined) usuarioUpdateData.apellido = data.apellido;
+      if (data.telefono !== undefined) usuarioUpdateData.telefono = data.telefono;
+      if (data.fotoPerfil !== undefined && data.fotoPerfil !== null && data.fotoPerfil !== "") {
+        usuarioUpdateData.foto_perfil = data.fotoPerfil;
+      }
+      if (data.estado !== undefined) {
+        usuarioUpdateData.estado = data.estado;
+      }
+
+      if (Object.keys(usuarioUpdateData).length > 0) {
+        await tx.usuario.update({
+          where: { id: emp.usuarioId },
+          data: usuarioUpdateData,
+        });
+      }
+    }
+
+    return formatEmployee(emp);
   });
-
-  return formatEmployee(emp);
 };
 
 // Soft delete
 const deactivate = async (id) => {
-  return prisma.empleado.update({
-    where: { id: Number(id) },
-    data:  { estado: "Inactivo" },
+  return prisma.$transaction(async (tx) => {
+    const empleado = await tx.empleado.update({
+      where: { id: Number(id) },
+      data:  { estado: "Inactivo" },
+    });
+
+    // Sincronizar estado con el Usuario relacionado
+    if (empleado.usuarioId) {
+      await tx.usuario.update({
+        where: { id: empleado.usuarioId },
+        data:  { estado: "Inactivo" },
+      });
+    }
+
+    return empleado;
   });
 };
 
