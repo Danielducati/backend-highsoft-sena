@@ -151,34 +151,46 @@ const create = async (req, res) => {
     }
 
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {
+      console.log("❌ [CREATE APPOINTMENT] Campos requeridos faltantes");
       return res.status(400).json({
         error: appointmentErrors.REQUIRED_FIELDS
       });
     }
 
+    console.log("✅ [CREATE APPOINTMENT] Campos requeridos presentes");
+
     if (isNaN(Date.parse(fecha))) {
+      console.log("❌ [CREATE APPOINTMENT] Formato de fecha inválido:", fecha);
       return res.status(400).json({
         error: appointmentErrors.INVALID_DATE_FORMAT
       });
     }
 
+    console.log("✅ [CREATE APPOINTMENT] Formato de fecha válido");
+
     const horaRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
     if (!horaRegex.test(hora)) {
+      console.log("❌ [CREATE APPOINTMENT] Formato de hora inválido:", hora);
       return res.status(400).json({
         error: appointmentErrors.INVALID_TIME_FORMAT
       });
     }
+
+    console.log("✅ [CREATE APPOINTMENT] Formato de hora válido");
 
     const hoyStr = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/Bogota"
     });
 
     if (fecha < hoyStr) {
+      console.log("❌ [CREATE APPOINTMENT] Fecha en el pasado:", fecha, "< ", hoyStr);
       return res.status(400).json({
         error: appointmentErrors.PAST_DATE
       });
     }
+
+    console.log("✅ [CREATE APPOINTMENT] Fecha no está en el pasado");
 
     // Extraer empleados únicos del array de servicios
     const empleadoIds = [
@@ -189,27 +201,34 @@ const create = async (req, res) => {
       )
     ];
 
+    console.log("📋 [CREATE APPOINTMENT] Empleados a validar:", empleadoIds);
+
     // Validar que cada empleado tiene horario registrado en esa fecha
     if (empleadoIds.length > 0) {
       const [y, m, d] = fecha.split("-").map(Number);
       const fechaLocal = new Date(Date.UTC(y, m - 1, d));
+      console.log("📋 [CREATE APPOINTMENT] Fecha local para validación:", fechaLocal);
 
       for (const empId of empleadoIds) {
         const horario = await prisma.horario.findFirst({
           where: { empleadoId: empId, fecha: fechaLocal },
         });
+        console.log(`📋 [CREATE APPOINTMENT] Horario para empleado ${empId}:`, horario ? "Encontrado" : "No encontrado");
         if (!horario) {
           const emp = await prisma.empleado.findUnique({
             where: { id: empId },
             select: { nombre: true, apellido: true },
           });
           const nombre = emp ? `${emp.nombre} ${emp.apellido}` : `Empleado #${empId}`;
+          console.log(`❌ [CREATE APPOINTMENT] ${nombre} no tiene horario para ${fecha}`);
           return res.status(400).json({
             error: `${nombre} no tiene horario registrado para el ${fecha}`,
           });
         }
       }
     }
+
+    console.log("✅ [CREATE APPOINTMENT] Todos los empleados tienen horario");
 
     // ── Validar disponibilidad de empleados (novedades y solapamientos) ──
     if (empleadoIds.length > 0) {
@@ -222,12 +241,16 @@ const create = async (req, res) => {
           servicioId: Number(s.servicio),
         }));
 
+      console.log("📋 [CREATE APPOINTMENT] Validando disponibilidad para:", asignaciones);
+
       // Validar novedades
       const availabilityCheck = await checkMultipleEmployeesAvailability(
         asignaciones,
         fecha,
         hora
       );
+
+      console.log("📋 [CREATE APPOINTMENT] Resultado de validación de disponibilidad:", availabilityCheck);
 
       if (!availabilityCheck.available) {
         const conflict = availabilityCheck.conflicts[0];
