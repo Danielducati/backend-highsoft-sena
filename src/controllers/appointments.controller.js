@@ -11,7 +11,10 @@ const getAll = async (req, res) => {
 
     const rol = (req.usuario?.rol ?? "").toLowerCase();
 
-    if (rol === "empleado") {
+    // Si es un rol de empleado (cualquier rol que no sea Admin o Cliente)
+    const esEmpleado = !["admin", "administrador", "cliente"].includes(rol);
+    
+    if (esEmpleado) {
       // Filtrar solo las citas donde este empleado está asignado
       const empRecord = await prisma.empleado.findFirst({
         where: { usuarioId: req.usuario.id },
@@ -52,9 +55,11 @@ const getOne = async (req, res) => {
       return res.status(404).json({ error: appointmentErrors.NOT_FOUND });
     }
 
-    // Si es Cliente (cualquier rol no admin/empleado), verificar que la cita le pertenece
+    // Si es Cliente, verificar que la cita le pertenece
     const rolNorm = (req.usuario?.rol ?? "").toLowerCase();
-    if (!["admin", "administrador", "empleado"].includes(rolNorm)) {
+    const esCliente = rolNorm === "cliente";
+    
+    if (esCliente) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
@@ -84,7 +89,9 @@ const create = async (req, res) => {
     console.log("👤 [CREATE APPOINTMENT] Rol del usuario:", rolNormCreate);
 
     // Si es cliente, forzar su propio clienteId
-    if (!["admin", "administrador", "empleado"].includes(rolNormCreate)) {
+    const esCliente = rolNormCreate === "cliente";
+    
+    if (esCliente) {
       const clienteRecord = await prisma.cliente.findFirst({
         where: { fk_id_usuario: req.usuario.id },
         select: { PK_id_cliente: true }
@@ -96,9 +103,11 @@ const create = async (req, res) => {
       console.log("✅ [CREATE APPOINTMENT] Cliente (rol cliente):", cliente);
     }
 
-    // Si es empleado, puede crear citas para cualquier cliente
+    // Si es empleado (cualquier rol que no sea Admin o Cliente), puede crear citas para cualquier cliente
     // pero debe especificar un cliente válido
-    if (rolNormCreate === "empleado") {
+    const esEmpleado = !["admin", "administrador", "cliente"].includes(rolNormCreate);
+    
+    if (esEmpleado) {
       console.log("🔍 [CREATE APPOINTMENT] Validando cliente para empleado...");
       
       if (!cliente) {
