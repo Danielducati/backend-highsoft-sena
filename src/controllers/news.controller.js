@@ -104,11 +104,30 @@ const create = async (req, res) => {
         servicio:      d.servicio?.nombre ?? "Servicio",
       }));
 
+      // Obtener empleados disponibles como alternativa
+      const empleadosDisponibles = await prisma.empleado.findMany({
+        where: {
+          id: { not: Number(employeeId) },
+          estado: "Activo",
+        },
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          especialidad: true,
+        },
+      });
+
       // 409 Conflict — hay servicios asignados al empleado, el frontend decide
       return res.status(409).json({
         conflict:  true,
         message: newsErrors.NEWS_CONFLICT_APPOINTMENTS,
         servicios,
+        empleadosDisponibles: empleadosDisponibles.map(e => ({
+          id: e.id,
+          name: `${e.nombre} ${e.apellido}`,
+          specialty: e.especialidad,
+        })),
       });
     }
 
