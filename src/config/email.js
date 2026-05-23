@@ -1,31 +1,44 @@
 const nodemailer = require("nodemailer");
 
-// ── Detectar si usar Resend (API HTTP) o nodemailer (SMTP) ──────────────────
-// Resend funciona en Railway (HTTP puro, sin bloqueo de puertos SMTP)
-// nodemailer funciona localmente
-const useResend = !!process.env.RESEND_API_KEY;
+// ── Selección de proveedor ──────────────────────────────────────────────────
+// Prioridad: Brevo (envía a cualquier correo) > Resend > nodemailer SMTP
+const useBrevo  = !!process.env.BREVO_API_KEY;
+const useResend = !useBrevo && !!process.env.RESEND_API_KEY;
 
+let brevoClient  = null;
 let resendClient = null;
-if (useResend) {
+
+if (useBrevo) {
+  try {
+    const SibApiV3Sdk = require("@getbrevo/brevo");
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    apiInstance.setApiKey(
+      SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
+      process.env.BREVO_API_KEY
+    );
+    brevoClient = apiInstance;
+    console.log("📧 Email: usando Brevo (envía a cualquier correo)");
+  } catch (e) {
+    console.error("❌ Error inicializando Brevo:", e.message);
+  }
+} else if (useResend) {
   try {
     const { Resend } = require("resend");
     resendClient = new Resend(process.env.RESEND_API_KEY);
-    console.log("📧 Email: usando Resend (API HTTP)");
+    console.log("📧 Email: usando Resend");
   } catch (e) {
     console.error("❌ Error inicializando Resend:", e.message);
   }
 } else {
-  console.log("📧 Email: usando nodemailer (SMTP)");
+  console.log("📧 Email: usando nodemailer SMTP");
 }
 
 // ── Transporter nodemailer (fallback local) ─────────────────────────────────
 const createTransporter = () => {
   const emailPass = (process.env.EMAIL_PASSWORD || "").replace(/\s/g, "");
   const emailUser = (process.env.EMAIL_USER || "").trim();
-
   console.log(`📧 SMTP user: ${emailUser || "❌ no definido"}`);
   console.log(`🔑 SMTP pass: ${emailPass ? `✅ ${emailPass.length} chars` : "❌ no definido"}`);
-
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 587,
@@ -39,12 +52,12 @@ const createTransporter = () => {
   });
 };
 
-const transporter = useResend ? null : createTransporter();
+const transporter = (!useBrevo && !useResend) ? createTransporter() : null;
 
 // ── Verificar conexión ──────────────────────────────────────────────────────
 const verifyConnection = async (retries = 3) => {
-  if (useResend) {
-    console.log("✅ Resend configurado (no requiere verificación SMTP)");
+  if (useBrevo || useResend) {
+    console.log("✅ Proveedor HTTP configurado (no requiere verificación SMTP)");
     return true;
   }
   for (let i = 0; i < retries; i++) {
@@ -63,15 +76,29 @@ const verifyConnection = async (retries = 3) => {
 verifyConnection();
 
 // ── Remitente ───────────────────────────────────────────────────────────────
-// Con Resend sin dominio verificado se usa onboarding@resend.dev
-// Con dominio verificado se puede usar el email real
-const FROM_NAME = "Highlife Spa";
-const FROM_EMAIL = useResend
-  ? (process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev")
-  : (process.env.EMAIL_USER || "").trim();
+const FROM_NAME  = "Highlife Spa";
+const FROM_EMAIL = useBrevo
+  ? (process.env.BREVO_FROM_EMAIL || process.env.EMAIL_USER || "").trim()
+  : useResend
+    ? (process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev")
+    : (process.env.EMAIL_USER || "").trim();
 
 // ── Función interna de envío ────────────────────────────────────────────────
 const sendMail = async ({ to, subject, html, text }) => {
+  // ── Brevo ──
+  if (useBrevo && brevoClient) {
+    const SibApiV3Sdk = require("@getbrevo/brevo");
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
+    sendSmtpEmail.textContent = text;
+    sendSmtpEmail.sender = { name: FROM_NAME, email: FROM_EMAIL };
+    sendSmtpEmail.to = [{ email: to }];
+    const result = await brevoClient.sendTransacEmail(sendSmtpEmail);
+    return result;
+  }
+
+  // ── Resend ──
   if (useResend && resendClient) {
     const { data, error } = await resendClient.emails.send({
       from: `${FROM_NAME} <${FROM_EMAIL}>`,
@@ -82,15 +109,16 @@ const sendMail = async ({ to, subject, html, text }) => {
     });
     if (error) throw new Error(error.message || JSON.stringify(error));
     return data;
-  } else {
-    return transporter.sendMail({
-      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-      to,
-      subject,
-      html,
-      text,
-    });
   }
+
+  // ── nodemailer SMTP ──
+  return transporter.sendMail({
+    from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+    to,
+    subject,
+    html,
+    text,
+  });
 };
 
 // ── EMAIL DE BIENVENIDA ─────────────────────────────────────────────────────
@@ -138,7 +166,7 @@ const sendWelcomeEmail = async (to, name) => {
                 </div>
               </div>
               <div class="footer">
-                <p>© 2025 Highlife Spa & Bar · info@highlifespa.com</p>
+                <p>© 2025 Highlife Spa & Bar · highlifespa.bar@gmail.com</p>
               </div>
             </div>
           </body>
@@ -193,12 +221,12 @@ const sendResetPasswordEmail = async (to, resetLink) => {
                 <div class="warning">
                   <strong>⚠️ Importante:</strong> Este enlace es válido solo por <strong>30 minutos</strong>. Si no solicitaste este cambio, ignora este correo.
                 </div>
-                <p style="font-size: 13px; color: #999;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+                <p style="font-size: 13px; color: #999;">Si el botón no funciona, copia y pega este enlace:<br>
                   <a href="${resetLink}" style="color: #1a3a2a; word-break: break-all;">${resetLink}</a>
                 </p>
               </div>
               <div class="footer">
-                <p>© 2025 Highlife Spa & Bar · info@highlifespa.com</p>
+                <p>© 2025 Highlife Spa & Bar · highlifespa.bar@gmail.com</p>
               </div>
             </div>
           </body>
@@ -213,15 +241,15 @@ const sendResetPasswordEmail = async (to, resetLink) => {
   }
 };
 
-// ── Test de conexión ────────────────────────────────────────────────────────
+// ── Test ────────────────────────────────────────────────────────────────────
 const testEmailConnection = async () => {
   console.log("🧪 Probando conexión de email...");
   try {
     const ok = await verifyConnection(1);
-    if (ok) console.log("✅ Conexión de email verificada exitosamente");
+    if (ok) console.log("✅ Conexión verificada");
     return ok;
   } catch (error) {
-    console.error("❌ Error en test de email:", error.message);
+    console.error("❌ Error:", error.message);
     return false;
   }
 };
