@@ -402,12 +402,15 @@ const getAvailableTimeSlots = async (req, res) => {
       orderBy: [{ fecha: "asc" }, { horaInicio: "asc" }],
     });
 
-    // IDs de empleados con novedad aprobada que cubre algún día de esta semana
+    // IDs de empleados con novedad aprobada o activa que cubre algún día de esta semana
     const novedadesAprobadas = await prisma.novedad.findMany({
       where: {
-        estado:      "aprobada",
+        estado: { in: ["pendiente", "Aprobada", "aprobada", "Activo"] },
         fechaInicio: { lte: sunday },
-        fechaFinal:  { gte: monday },
+        OR: [
+          { fechaFinal: { gte: monday } },
+          { fechaFinal: null }, // Novedades sin fecha final
+        ],
       },
       include: {
         horario: { select: { empleadoId: true, fecha: true } },
