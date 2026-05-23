@@ -167,7 +167,7 @@ const forgotPassword = async (req, res) => {
       },
     });
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const resetLink = `${process.env.FRONTEND_URL}?token=${resetToken}`;
 
     // sendResetPasswordEmail maneja su propio error internamente, no bloquea el flujo
     await sendResetPasswordEmail(correo, resetLink);
