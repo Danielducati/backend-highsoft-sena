@@ -97,6 +97,14 @@ const create = async (req, res) => {
 
     console.log("📝 [CREATE APPOINTMENT] Body recibido:", JSON.stringify({ cliente, fecha, hora, servicios: servicios?.length }, null, 2));
 
+    // Validación temprana del cliente
+    if (!cliente || cliente === 0 || isNaN(Number(cliente))) {
+      console.log("❌ [CREATE APPOINTMENT] Cliente inválido o faltante:", cliente);
+      return res.status(400).json({ 
+        error: "El campo 'cliente' es requerido y debe ser un número válido mayor que 0" 
+      });
+    }
+
     const rolNormCreate = (req.usuario?.rol ?? "").toLowerCase();
     console.log("👤 [CREATE APPOINTMENT] Rol del usuario:", rolNormCreate);
 
