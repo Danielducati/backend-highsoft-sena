@@ -2,6 +2,7 @@
 const appointmentsModel = require("../models/appointments");
 const prisma = require("../config/prisma");
 const { appointmentErrors } = require("../utils/errorMessages");
+const { checkMultipleEmployeesAvailability } = require("../utils/employeeAvailability");
 
 const getAll = async (req, res) => {
   try {
@@ -77,7 +78,10 @@ const create = async (req, res) => {
 
     let { cliente, fecha, hora, notas, servicios } = req.body;
 
+    console.log("📝 [CREATE APPOINTMENT] Body recibido:", JSON.stringify({ cliente, fecha, hora, servicios: servicios?.length }, null, 2));
+
     const rolNormCreate = (req.usuario?.rol ?? "").toLowerCase();
+    console.log("👤 [CREATE APPOINTMENT] Rol del usuario:", rolNormCreate);
 
     // Si es cliente, forzar su propio clienteId
     if (!["admin", "administrador", "empleado"].includes(rolNormCreate)) {
@@ -89,21 +93,40 @@ const create = async (req, res) => {
         return res.status(400).json({ error: "No se encontró un perfil de cliente asociado a tu cuenta. Contacta al administrador." });
       }
       cliente = clienteRecord.PK_id_cliente;
+      console.log("✅ [CREATE APPOINTMENT] Cliente (rol cliente):", cliente);
     }
 
-    // Si es empleado, forzar su propio empleadoId en todos los servicios
+    // Si es empleado, puede crear citas para cualquier cliente
+    // pero debe especificar un cliente válido
     if (rolNormCreate === "empleado") {
-      const empRecord = await prisma.empleado.findFirst({
-        where: { usuarioId: req.usuario.id },
-        select: { id: true }
+      console.log("🔍 [CREATE APPOINTMENT] Validando cliente para empleado...");
+      
+      if (!cliente) {
+        console.log("❌ [CREATE APPOINTMENT] Cliente no especificado en el body");
+        return res.status(400).json({ 
+          error: "Debes seleccionar un cliente para la cita" 
+        });
+      }
+      
+      console.log("🔍 [CREATE APPOINTMENT] Verificando que cliente existe:", cliente);
+      
+      // Verificar que el cliente existe
+      const clienteExists = await prisma.cliente.findUnique({
+        where: { PK_id_cliente: Number(cliente) },
+        select: { PK_id_cliente: true, nombre: true, apellido: true }
       });
-      if (!empRecord) {
-        return res.status(400).json({ error: "No se encontró un perfil de empleado asociado a tu cuenta." });
+      
+      if (!clienteExists) {
+        console.log("❌ [CREATE APPOINTMENT] Cliente no encontrado en BD");
+        return res.status(400).json({ 
+          error: "El cliente seleccionado no existe" 
+        });
       }
-      // Sobreescribir el empleado en cada servicio con el empleado logueado
-      if (Array.isArray(servicios)) {
-        servicios = servicios.map(s => ({ ...s, empleado_usuario: empRecord.id }));
-      }
+
+      console.log("✅ [CREATE APPOINTMENT] Cliente válido:", `${clienteExists.nombre} ${clienteExists.apellido}`);
+
+      // El empleado puede asignar servicios a cualquier empleado (incluyéndose a sí mismo)
+      // No forzamos su propio empleadoId, dejamos que elija
     }
 
     if (!fecha || !hora || !Array.isArray(servicios) || servicios.length === 0) {
@@ -167,9 +190,33 @@ const create = async (req, res) => {
       }
     }
 
+    // ── Validar disponibilidad de empleados (novedades y solapamientos) ──
     if (empleadoIds.length > 0) {
 
-      // Traer duración de cada servicio
+      // Preparar asignaciones para validación de novedades
+      const asignaciones = servicios
+        .filter(s => s.empleado_usuario)
+        .map(s => ({
+          empleadoId: Number(s.empleado_usuario),
+          servicioId: Number(s.servicio),
+        }));
+
+      // Validar novedades
+      const availabilityCheck = await checkMultipleEmployeesAvailability(
+        asignaciones,
+        fecha,
+        hora
+      );
+
+      if (!availabilityCheck.available) {
+        const conflict = availabilityCheck.conflicts[0];
+        return res.status(400).json({
+          error: conflict.reason,
+          novedadInfo: conflict.novedad,
+        });
+      }
+
+      // Traer duración de cada servicio para validar solapamiento con otras citas
       const serviciosDB = await prisma.servicio.findMany({
         where: {
           id: { in: servicios.map(s => Number(s.servicio)) }
@@ -196,8 +243,6 @@ const create = async (req, res) => {
 
         const nuevaInicio = new Date(`1970-01-01T${hora}:00.000Z`);
         const nuevaFin = new Date(nuevaInicio.getTime() + duracionTotal * 60000);
-
-        console.log(`Empleado ${empId} → nuevaInicio: ${nuevaInicio}, nuevaFin: ${nuevaFin}`);
 
         // Citas existentes del empleado en esa fecha
         const citasEmpleado = await prisma.agendamientoCita.findMany({
@@ -228,8 +273,6 @@ const create = async (req, res) => {
             const duracionExistente = detalle.servicio?.duracion || 60;
             const finExistente      = new Date(inicioExistente.getTime() + duracionExistente * 60000);
 
-            console.log(`  Cita existente #${cita.id} → inicio: ${inicioExistente}, fin: ${finExistente}`);
-
             const overlap = nuevaInicio < finExistente && nuevaFin > inicioExistente;
 
             if (overlap) {
@@ -240,59 +283,6 @@ const create = async (req, res) => {
 
           }
 
-        }
-
-        // ── Validar novedades del empleado ──────────────────────────────────
-        const horariosConNovedad = await prisma.horario.findMany({
-          where: {
-            empleadoId: empId,
-            fecha:      new Date(fecha + "T00:00:00.000Z"),
-            novedades: {
-              some: {
-                estado: "Activo",
-                OR: [
-                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: { gte: new Date(fecha + "T00:00:00.000Z") } },
-                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: null },
-                ],
-              },
-            },
-          },
-          include: {
-            novedades: {
-              where: {
-                estado: "Activo",
-                OR: [
-                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: { gte: new Date(fecha + "T00:00:00.000Z") } },
-                  { fechaInicio: { lte: new Date(fecha + "T00:00:00.000Z") }, fechaFinal: null },
-                ],
-              },
-            },
-          },
-        });
-
-        for (const horario of horariosConNovedad) {
-          for (const novedad of horario.novedades) {
-            if (novedad.horaInicio && novedad.horaFinal) {
-              const hi = new Date(novedad.horaInicio);
-              const hf = new Date(novedad.horaFinal);
-              const novedadInicio = new Date(
-                `1970-01-01T${String(hi.getUTCHours()).padStart(2,"0")}:${String(hi.getUTCMinutes()).padStart(2,"0")}:00.000Z`
-              );
-              const novedadFin = new Date(
-                `1970-01-01T${String(hf.getUTCHours()).padStart(2,"0")}:${String(hf.getUTCMinutes()).padStart(2,"0")}:00.000Z`
-              );
-              if (nuevaInicio < novedadFin && nuevaFin > novedadInicio) {
-                return res.status(400).json({
-                  error: `El empleado tiene una novedad (${novedad.tipoNovedad ?? "ausencia"}) que impide agendar en ese horario`,
-                });
-              }
-            } else {
-              // Sin rango horario → bloquea todo el día
-              return res.status(400).json({
-                error: `El empleado no está disponible ese día por una novedad registrada (${novedad.tipoNovedad ?? "ausencia"})`,
-              });
-            }
-          }
         }
 
       } // end for empId
@@ -337,7 +327,8 @@ const update = async (req, res) => {
 
     // Verificar que la cita no esté completada
     const cita = await prisma.agendamientoCita.findUnique({
-      where: { id }
+      where: { id },
+      include: { detalles: true }
     });
 
     if (!cita) {
@@ -352,6 +343,51 @@ const update = async (req, res) => {
       });
     }
 
+    // Si se está actualizando fecha, hora o servicios, validar disponibilidad
+    const { fecha, hora, servicios } = req.body;
+    
+    if ((fecha || hora || servicios) && cita.detalles.length > 0) {
+      const fechaFinal = fecha || cita.fecha.toISOString().split("T")[0];
+      const horaFinal = hora || cita.horario.toISOString().slice(11, 16);
+      
+      // Obtener empleados de los servicios (nuevos o existentes)
+      let empleadosServicios = [];
+      
+      if (servicios && Array.isArray(servicios)) {
+        empleadosServicios = servicios
+          .filter(s => s.empleado_usuario)
+          .map(s => ({
+            empleadoId: Number(s.empleado_usuario),
+            servicioId: Number(s.servicio),
+          }));
+      } else {
+        // Usar los empleados actuales de la cita
+        empleadosServicios = cita.detalles
+          .filter(d => d.empleadoId)
+          .map(d => ({
+            empleadoId: d.empleadoId,
+            servicioId: d.servicioId,
+          }));
+      }
+
+      if (empleadosServicios.length > 0) {
+        // Validar disponibilidad con novedades
+        const availabilityCheck = await checkMultipleEmployeesAvailability(
+          empleadosServicios,
+          fechaFinal,
+          horaFinal
+        );
+
+        if (!availabilityCheck.available) {
+          const conflict = availabilityCheck.conflicts[0];
+          return res.status(400).json({
+            error: conflict.reason,
+            novedadInfo: conflict.novedad,
+          });
+        }
+      }
+    }
+
     await appointmentsModel.update(id, req.body);
 
     res.json({
@@ -359,6 +395,8 @@ const update = async (req, res) => {
     });
 
   } catch (err) {
+
+    console.error("Error actualizando cita:", err);
 
     res.status(500).json({
       error: appointmentErrors.SERVER_ERROR
