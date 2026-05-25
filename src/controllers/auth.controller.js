@@ -279,9 +279,34 @@ const me = async (req, res) => {
     const rol = usuario.rol.nombre.toLowerCase();
 
     if (rol === "cliente") {
-      perfil = await prisma.cliente.findFirst({ where: { fk_id_usuario: usuario.id } });
+      const clienteData = await prisma.cliente.findFirst({ 
+        where: { fk_id_usuario: usuario.id } 
+      });
+      if (clienteData) {
+        perfil = {
+          id: clienteData.PK_id_cliente,
+          nombre: clienteData.nombre,
+          apellido: clienteData.apellido,
+          correo: clienteData.correo,
+          telefono: clienteData.telefono,
+          tipo: 'cliente'
+        };
+      }
     } else if (rol !== "admin" && rol !== "administrador") {
-      perfil = await prisma.empleado.findFirst({ where: { usuarioId: usuario.id } });
+      const empleadoData = await prisma.empleado.findFirst({ 
+        where: { usuarioId: usuario.id } 
+      });
+      if (empleadoData) {
+        perfil = {
+          id: empleadoData.id,
+          nombre: empleadoData.nombre,
+          apellido: empleadoData.apellido,
+          correo: empleadoData.correo,
+          telefono: empleadoData.telefono,
+          especialidad: empleadoData.especialidad,
+          tipo: 'empleado'
+        };
+      }
     }
 
     // Permisos actualizados del rol
@@ -299,6 +324,7 @@ const me = async (req, res) => {
       perfil,
     });
   } catch (err) {
+    console.error("❌ Error en /auth/me:", err);
     res.status(500).json({ error: err.message });
   }
 };
