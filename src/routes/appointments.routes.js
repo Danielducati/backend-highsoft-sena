@@ -11,6 +11,7 @@ router.post("/mis-citas/:id/cancel",        verificarToken, ctrl.cancelMiCita);
 
 // Rutas para empleados: ver sus citas asignadas
 router.get("/mis-citas-empleado",           verificarToken, ctrl.getAll);
+router.post("/mis-citas-empleado",          verificarToken, hasPermission("citas.crear"), ctrl.create);
 
 // Rutas principales (requieren permisos)
 router.get("/",             verificarToken, hasPermission("citas.ver"),      ctrl.getAll);
