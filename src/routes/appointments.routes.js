@@ -9,10 +9,11 @@ router.post("/mis-citas",                   verificarToken, ctrl.create);
 router.put("/mis-citas/:id",                verificarToken, ctrl.update);
 router.post("/mis-citas/:id/cancel",        verificarToken, ctrl.cancelMiCita);
 
-// Rutas para empleados: ver y crear citas propias
+// Rutas para empleados: ver sus citas asignadas
 router.get("/mis-citas-empleado",           verificarToken, ctrl.getAll);
-router.post("/mis-citas-empleado",          verificarToken, ctrl.create);
+router.post("/mis-citas-empleado",          verificarToken, hasPermission("citas.crear"), ctrl.create);
 
+// Rutas principales (requieren permisos)
 router.get("/",             verificarToken, hasPermission("citas.ver"),      ctrl.getAll);
 router.get("/:id",          verificarToken, hasPermission("citas.ver"),      ctrl.getOne);
 router.post("/",            verificarToken, hasPermission("citas.crear"),    ctrl.create);
