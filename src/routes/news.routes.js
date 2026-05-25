@@ -2,12 +2,14 @@
 const express = require("express");
 const router  = express.Router();
 const ctrl    = require("../controllers/news.controller");
+const { verificarToken } = require("../middlewares/auth.middleware");
 
-router.get("/",                                ctrl.getAll);
-router.get("/employee/:employeeId/date/:date", ctrl.getEmployeeNewsForDate);
-router.post("/",                               ctrl.create);
-router.put("/:id",                             ctrl.update);
-router.patch("/:id/status",                    ctrl.updateStatus);
+// Todas las rutas requieren autenticación
+router.get("/",                                verificarToken, ctrl.getAll);
+router.get("/employee/:employeeId/date/:date", verificarToken, ctrl.getEmployeeNewsForDate);
+router.post("/",                               verificarToken, ctrl.create);
+router.put("/:id",                             verificarToken, ctrl.update);
+router.patch("/:id/status",                    verificarToken, ctrl.updateStatus);
 router.delete("/:id",                          ctrl.remove);
 
 module.exports = router;
