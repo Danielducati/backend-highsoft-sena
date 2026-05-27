@@ -55,11 +55,11 @@ const updateMiPerfil = async (req, res) => {
 };
 
 // ======================================================
-// GET DISPONIBLES (empleados con horario en una fecha, sin novedades aprobadas)
+// GET DISPONIBLES (empleados con horario en una fecha, sin novedades aprobadas en ese horario)
 // ======================================================
 const getDisponibles = async (req, res) => {
   try {
-    const { fecha } = req.query;
+    const { fecha, hora } = req.query;
     if (!fecha || isNaN(Date.parse(fecha))) {
       return res.status(400).json({ error: "Parámetro 'fecha' inválido (YYYY-MM-DD)" });
     }
@@ -74,22 +74,57 @@ const getDisponibles = async (req, res) => {
       include: { empleado: true },
     });
 
-    // IDs de empleados con novedad aprobada que cubre esta fecha
-    // La novedad cubre la fecha si: fechaInicio <= fecha <= fechaFinal
+    // Novedades aprobadas que cubren esta fecha
     const novedadesAprobadas = await prisma.novedad.findMany({
       where: {
         estado:      "aprobada",
         fechaInicio: { lte: fechaLocal },
-        fechaFinal:  { gte: fechaLocal },
+        OR: [
+          { fechaFinal: { gte: fechaLocal } },
+          { fechaFinal: null },
+        ],
       },
       include: {
         horario: { select: { empleadoId: true } },
       },
     });
 
-    const empleadosConNovedad = new Set(
-      novedadesAprobadas.map(n => n.horario.empleadoId)
-    );
+    // Si se proporciona hora, validar solapamiento de horarios
+    const empleadosBloqueados = new Set();
+    
+    if (hora) {
+      // Convertir hora de la cita a minutos desde medianoche para comparar
+      const [horaH, horaM] = hora.split(":").map(Number);
+      const citaMinutos = horaH * 60 + horaM;
+
+      for (const novedad of novedadesAprobadas) {
+        const empId = novedad.horario.empleadoId;
+        
+        // Si la novedad NO tiene rango horario (horaInicio y horaFinal son null), bloquea todo el día
+        if (!novedad.horaInicio || !novedad.horaFinal) {
+          empleadosBloqueados.add(empId);
+          continue;
+        }
+
+        // Si tiene rango horario, validar solapamiento
+        const novedadInicio = new Date(novedad.horaInicio);
+        const novedadFin = new Date(novedad.horaFinal);
+        
+        const novedadInicioMinutos = novedadInicio.getUTCHours() * 60 + novedadInicio.getUTCMinutes();
+        const novedadFinMinutos = novedadFin.getUTCHours() * 60 + novedadFin.getUTCMinutes();
+
+        // La cita se solapa con la novedad si la hora de la cita está dentro del rango de la novedad
+        // o si la cita empieza antes de que termine la novedad
+        if (citaMinutos >= novedadInicioMinutos && citaMinutos < novedadFinMinutos) {
+          empleadosBloqueados.add(empId);
+        }
+      }
+    } else {
+      // Si no se proporciona hora, bloquear empleados con cualquier novedad aprobada ese día
+      for (const novedad of novedadesAprobadas) {
+        empleadosBloqueados.add(novedad.horario.empleadoId);
+      }
+    }
 
     const COLORS = ["#78D1BD","#A78BFA","#60A5FA","#FBBF24","#F87171","#34D399","#FB923C","#E879F9"];
 
@@ -99,7 +134,7 @@ const getDisponibles = async (req, res) => {
     horarios.forEach((h, idx) => {
       if (!h.empleado || h.empleado.estado !== "Activo") return;
       if (seen.has(h.empleadoId)) return;
-      if (empleadosConNovedad.has(h.empleadoId)) return; // ← excluir por novedad
+      if (empleadosBloqueados.has(h.empleadoId)) return; // ← excluir por novedad
       seen.add(h.empleadoId);
       empleados.push({
         id:        String(h.empleado.id),
