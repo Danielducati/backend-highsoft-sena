@@ -140,17 +140,27 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
 const update = async (id, data) => {
   const empId = Number(id);
 
-  // Documento duplicado en otro empleado
+  // Documento duplicado en otro empleado o cliente
   if (data.tipoDocumento && data.numeroDocumento) {
-    const existeDoc = await prisma.empleado.findFirst({
+    const existeEmp = await prisma.empleado.findFirst({
       where: {
         tipoDocumento:   data.tipoDocumento,
         numeroDocumento: data.numeroDocumento,
         NOT: { id: empId },
       },
     });
-    if (existeDoc) {
+    if (existeEmp) {
       throw new Error(`Ya existe un empleado con ${data.tipoDocumento} ${data.numeroDocumento}`);
+    }
+
+    const existeCli = await prisma.cliente.findFirst({
+      where: {
+        tipo_documento:   data.tipoDocumento,
+        numero_documento: data.numeroDocumento,
+      },
+    });
+    if (existeCli) {
+      throw new Error(`Ya existe un cliente con ${data.tipoDocumento} ${data.numeroDocumento}`);
     }
   }
 
