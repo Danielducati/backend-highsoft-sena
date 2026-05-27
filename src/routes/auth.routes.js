@@ -1,7 +1,7 @@
 const express = require("express");
 const {
   login, loginWithGoogle, register, forgotPassword,
-  validateResetToken, resetPassword, me, changePassword,
+  validateResetToken, resetPassword, me, changePassword, establecerContrasena,
 } = require("../controllers/auth.controller");
 const { verificarToken } = require("../middlewares/auth.middleware");
 const { validateClientRegister } = require("../middlewares/validate.middleware");
@@ -16,6 +16,7 @@ router.post("/forgot-password",      forgotPassword);
 router.post("/validate-reset-token", validateResetToken);
 router.post("/reset-password",       resetPassword);
 router.post("/change-password",      verificarToken, changePassword);
+router.post("/establecer-contrasena", verificarToken, establecerContrasena);
 router.get("/me",                    verificarToken, me);
 
 // Diagnóstico de email (solo para verificar configuración en producción)
