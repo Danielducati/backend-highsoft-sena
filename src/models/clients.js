@@ -210,7 +210,7 @@ const update = async (id, { firstName, lastName, documentType, document,
       Estado:           estado       ?? "Activo",
     };
 
-    if (image !== undefined && image !== null && image !== "") {
+    if (image !== undefined && image !== null) {
       updateData.foto_perfil = image;
     }
 
@@ -228,7 +228,7 @@ const update = async (id, { firstName, lastName, documentType, document,
       if (lastName !== undefined) usuarioUpdateData.apellido = lastName;
       if (phone !== undefined) usuarioUpdateData.telefono = phone;
       if (email !== undefined) usuarioUpdateData.correo = email;
-      if (image !== undefined && image !== null && image !== "") {
+      if (image !== undefined && image !== null) {
         usuarioUpdateData.foto_perfil = image;
       }
       if (estado !== undefined) {
