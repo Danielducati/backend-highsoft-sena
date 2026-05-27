@@ -184,7 +184,7 @@ const update = async (id, { firstName, lastName, documentType, document,
     }
   }
 
-  // Documento duplicado en otro cliente
+  // Documento duplicado en otro cliente o empleado
   if (documentType && document) {
     const existeDoc = await prisma.cliente.findFirst({
       where: {
@@ -195,6 +195,16 @@ const update = async (id, { firstName, lastName, documentType, document,
     });
     if (existeDoc) {
       throw new Error(`Ya existe un cliente con ${documentType} ${document}`);
+    }
+
+    const existeEmp = await prisma.empleado.findFirst({
+      where: {
+        tipoDocumento:   documentType,
+        numeroDocumento: document,
+      },
+    });
+    if (existeEmp) {
+      throw new Error(`Ya existe un empleado con ${documentType} ${document}`);
     }
   }
 
