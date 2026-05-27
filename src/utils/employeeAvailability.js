@@ -226,19 +226,34 @@ async function checkMultipleEmployeesAvailability(asignaciones, fecha, horaInici
  * vs los que solo bloquean parcialmente
  */
 const TIPOS_NOVEDAD_BLOQUEANTES = {
-  // Bloquean todo el día (sin importar hora)
-  BLOQUEO_COMPLETO: ["incapacidad", "ausencia", "vacaciones"],
+  // Bloquean todo el día (sin importar hora) - solo si NO tienen rango horario
+  BLOQUEO_COMPLETO: ["incapacidad", "permiso", "vacaciones", "otro"],
+  
+  // Bloquean según el rango horario especificado (si tienen horas) o todo el día (si no tienen horas)
+  BLOQUEO_CONDICIONAL: ["retraso", "ausencia"],
   
   // Bloquean solo el rango horario especificado
-  BLOQUEO_PARCIAL: ["permiso", "retraso", "percance", "otro"],
+  BLOQUEO_PARCIAL: ["percance"],
 };
 
 /**
  * Determina si un tipo de novedad bloquea todo el día o solo un rango horario
  */
-function isFullDayBlock(tipoNovedad) {
+function isFullDayBlock(tipoNovedad, tieneRangoHorario) {
   const tipo = (tipoNovedad || "").toLowerCase();
-  return TIPOS_NOVEDAD_BLOQUEANTES.BLOQUEO_COMPLETO.includes(tipo);
+  
+  // Si es de bloqueo completo, siempre bloquea todo el día
+  if (TIPOS_NOVEDAD_BLOQUEANTES.BLOQUEO_COMPLETO.includes(tipo)) {
+    return true;
+  }
+  
+  // Si es de bloqueo condicional (retraso, ausencia), depende de si tiene rango horario
+  if (TIPOS_NOVEDAD_BLOQUEANTES.BLOQUEO_CONDICIONAL.includes(tipo)) {
+    return !tieneRangoHorario; // Bloquea todo el día solo si NO tiene rango horario
+  }
+  
+  // Si es de bloqueo parcial, nunca bloquea todo el día
+  return false;
 }
 
 module.exports = {
