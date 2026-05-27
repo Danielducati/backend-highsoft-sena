@@ -1,6 +1,6 @@
 const express = require("express");
 const {
-  login, register, forgotPassword,
+  login, loginWithGoogle, register, forgotPassword,
   validateResetToken, resetPassword, me, changePassword,
 } = require("../controllers/auth.controller");
 const { verificarToken } = require("../middlewares/auth.middleware");
@@ -10,6 +10,7 @@ const { verifyConnection, sendWelcomeEmail } = require("../config/email");
 const router = express.Router();
 
 router.post("/login",                login);
+router.post("/google",               loginWithGoogle);
 router.post("/register",             validateClientRegister, register);
 router.post("/forgot-password",      forgotPassword);
 router.post("/validate-reset-token", validateResetToken);
