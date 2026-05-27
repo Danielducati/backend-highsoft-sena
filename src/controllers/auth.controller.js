@@ -1,9 +1,13 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { OAuth2Client } = require("google-auth-library");
 const prisma = require("../config/prisma");
 const { sendWelcomeEmail, sendResetPasswordEmail } = require("../config/email");
 
 const JWT_SECRET = process.env.JWT_SECRET || "highlife_secret_2024";
+const googleClient = process.env.GOOGLE_CLIENT_ID
+  ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+  : null;
 
 // ── LOGIN ──────────────────────────────────────────
 const login = async (req, res) => {
@@ -81,6 +85,140 @@ const login = async (req, res) => {
   } catch (err) {
     console.error("❌ ERROR LOGIN:", err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+// ── LOGIN WITH GOOGLE (OAuth 2.0) ─────────────────
+const loginWithGoogle = async (req, res) => {
+  try {
+    if (!googleClient || !process.env.GOOGLE_CLIENT_ID) {
+      return res.status(500).json({
+        error: "Google OAuth no está configurado en el servidor",
+      });
+    }
+
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ error: "idToken es requerido" });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+
+    if (!payload?.email || !payload?.email_verified) {
+      return res.status(401).json({ error: "Token de Google inválido" });
+    }
+
+    const correo = payload.email.trim().toLowerCase();
+    const nombreGoogle =
+      (payload.given_name || payload.name || "Usuario").trim();
+    const apellidoGoogle = (payload.family_name || "").trim();
+    const fotoGoogle = (payload.picture || "").trim();
+
+    let usuario = await prisma.usuario.findUnique({
+      where: { correo },
+      include: { rol: true },
+    });
+
+    if (!usuario) {
+      const rolCliente = await prisma.rol.findFirst({
+        where: { nombre: "Cliente" },
+      });
+      if (!rolCliente) {
+        return res
+          .status(500)
+          .json({ error: "Rol Cliente no encontrado en la base de datos" });
+      }
+
+      const hashedRandom = await bcrypt.hash(
+        `google_${payload.sub}_${Date.now()}`,
+        10
+      );
+
+      usuario = await prisma.usuario.create({
+        data: {
+          correo,
+          contrasena: hashedRandom,
+          estado: "Activo",
+          rolId: rolCliente.id,
+          Cliente: {
+            create: {
+              nombre: nombreGoogle || "Usuario",
+              apellido: apellidoGoogle || "",
+              correo,
+              telefono: null,
+              tipo_documento: null,
+              numero_documento: null,
+              direccion: null,
+              foto_perfil: fotoGoogle,
+              Estado: "Activo",
+            },
+          },
+        },
+        include: { rol: true },
+      });
+    }
+
+    if (usuario.estado !== "Activo") {
+      return res.status(403).json({
+        error:
+          "Tu cuenta está inhabilitada. Contacta al administrador para más información.",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: usuario.id,
+        correo: usuario.correo,
+        rol: usuario.rol.nombre,
+        rolId: usuario.rolId,
+      },
+      JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+
+    let nombre = "";
+    let apellido = "";
+    let foto = fotoGoogle;
+
+    const empleado = await prisma.empleado.findFirst({
+      where: { usuarioId: usuario.id },
+      select: { nombre: true, apellido: true, fotoPerfil: true },
+    });
+
+    if (empleado) {
+      nombre = empleado.nombre ?? "";
+      apellido = empleado.apellido ?? "";
+      foto = empleado.fotoPerfil ?? "";
+    } else {
+      const cliente = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: usuario.id },
+        select: { nombre: true, apellido: true, foto_perfil: true },
+      });
+      if (cliente) {
+        nombre = cliente.nombre ?? "";
+        apellido = cliente.apellido ?? "";
+        foto = cliente.foto_perfil ?? fotoGoogle;
+      }
+    }
+
+    return res.json({
+      token,
+      usuario: {
+        id: usuario.id,
+        correo: usuario.correo,
+        rol: usuario.rol.nombre,
+        nombre,
+        apellido,
+        foto,
+      },
+    });
+  } catch (err) {
+    console.error("❌ ERROR GOOGLE LOGIN:", err);
+    return res.status(500).json({ error: "No se pudo iniciar con Google" });
   }
 };
 
@@ -353,4 +491,13 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { login, register, forgotPassword, validateResetToken, resetPassword, me, changePassword };
+module.exports = {
+  login,
+  loginWithGoogle,
+  register,
+  forgotPassword,
+  validateResetToken,
+  resetPassword,
+  me,
+  changePassword,
+};
