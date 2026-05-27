@@ -110,8 +110,9 @@ const getDisponibles = async (req, res) => {
         const novedadInicio = new Date(novedad.horaInicio);
         const novedadFin = new Date(novedad.horaFinal);
         
-        const novedadInicioMinutos = novedadInicio.getUTCHours() * 60 + novedadInicio.getUTCMinutes();
-        const novedadFinMinutos = novedadFin.getUTCHours() * 60 + novedadFin.getUTCMinutes();
+        // Usar getHours() en lugar de getUTCHours() para obtener la hora local
+        const novedadInicioMinutos = novedadInicio.getHours() * 60 + novedadInicio.getMinutes();
+        const novedadFinMinutos = novedadFin.getHours() * 60 + novedadFin.getMinutes();
 
         // La cita se solapa con la novedad si la hora de la cita está dentro del rango de la novedad
         // o si la cita empieza antes de que termine la novedad
