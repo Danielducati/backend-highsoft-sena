@@ -93,7 +93,8 @@ const loginWithGoogle = async (req, res) => {
   try {
     if (!googleClient || !process.env.GOOGLE_CLIENT_ID) {
       return res.status(500).json({
-        error: "Google OAuth no está configurado en el servidor",
+        error:
+          "Google OAuth no está configurado en el servidor. Agrega GOOGLE_CLIENT_ID en las variables de entorno (Web client ID de Firebase > Authentication > Google).",
       });
     }
 
