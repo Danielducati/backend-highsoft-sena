@@ -107,6 +107,7 @@ const updateMiPerfil = async (req, res) => {
       phone:        phone        ?? cliente.telefono,
       address:      address      ?? cliente.direccion,
       image:        image,
+      estado:       cliente.Estado, // preservar el estado actual del cliente
     });
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
