@@ -4,15 +4,6 @@ const bcrypt = require("bcryptjs");
 
 const COLORS = ["#78D1BD","#A78BFA","#60A5FA","#FBBF24","#F87171","#34D399","#FB923C","#E879F9"];
 
-// Mapeo entre roles y especialidades (categorías)
-const ROL_A_ESPECIALIDAD = {
-  "Barbero": "Barbería",
-  "Cosmetóloga": "Cosmetología",
-  "Estilista": "Estilismo",
-  "Manicurista": "Manicura",
-  "Masajista": "Masajes",
-};
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function formatEmployee(emp, usuario = null, idx = 0) {
   // Combinar datos de ambas tablas (usar el que tenga información)
@@ -24,13 +15,10 @@ function formatEmployee(emp, usuario = null, idx = 0) {
   // Para el estado, usar el del Empleado (es la fuente de verdad para el módulo de empleados)
   const estado = emp.estado;
 
-  // Sincronizar especialidad con el rol del usuario
+  // La especialidad debe ser igual al rol del usuario
   let especialidad = emp.especialidad;
   if (usuario?.rol?.nombre) {
-    const especialidadDelRol = ROL_A_ESPECIALIDAD[usuario.rol.nombre];
-    if (especialidadDelRol) {
-      especialidad = especialidadDelRol;
-    }
+    especialidad = usuario.rol.nombre;
   }
 
   return {
@@ -86,30 +74,17 @@ const getById = async (id) => {
   return emp ? formatEmployee(emp, emp.usuario) : null;
 };
 
-// Mapeo entre especialidades (categorías) y roles
-const ESPECIALIDAD_A_ROL = {
-  "Barbería": "Barbero",
-  "Cosmetología": "Cosmetóloga",
-  "Estilismo": "Estilista",
-  "Cabello": "Estilista",
-  "Manicura": "Manicurista",
-  "Uñas": "Manicurista",
-  "Masajes": "Masajista",
-};
-
 const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo,
                         telefono, ciudad, especialidad, direccion, fotoPerfil,
                         contrasena, idRol }) => {
   const passwordBase = contrasena?.trim() || numeroDocumento || "empleado123";
   const hashed = await bcrypt.hash(passwordBase, 10);
 
-  // Si se proporciona especialidad, buscar el rol correspondiente
+  // Si se proporciona especialidad, buscar el rol con ese nombre exacto
   let rolId = idRol;
   if (especialidad && !rolId) {
-    // Mapear especialidad a rol (Barbería -> Barbero, etc.)
-    const nombreRol = ESPECIALIDAD_A_ROL[especialidad] || especialidad;
     const rolPorEspecialidad = await prisma.rol.findFirst({
-      where: { nombre: nombreRol },
+      where: { nombre: especialidad },
     });
     if (rolPorEspecialidad) {
       rolId = rolPorEspecialidad.id;
@@ -136,10 +111,10 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
     rolId = rolEmpleado.id;
   }
 
-  // Si no se proporcionó especialidad pero sí rol, mapear rol a especialidad
+  // La especialidad debe ser igual al nombre del rol
   let especialidadFinal = especialidad;
   if (!especialidadFinal && rolExiste) {
-    especialidadFinal = ROL_A_ESPECIALIDAD[rolExiste.nombre] || rolExiste.nombre;
+    especialidadFinal = rolExiste.nombre;
   }
 
   // Documento duplicado
@@ -247,11 +222,10 @@ const update = async (id, data) => {
         usuarioUpdateData.estado = data.estado;
       }
 
-      // Si cambia la especialidad, actualizar el rol del usuario
+      // Si cambia la especialidad, actualizar el rol del usuario con el mismo nombre
       if (data.especialidad !== undefined) {
-        const nombreRol = ESPECIALIDAD_A_ROL[data.especialidad] || data.especialidad;
         const rolPorEspecialidad = await tx.rol.findFirst({
-          where: { nombre: nombreRol },
+          where: { nombre: data.especialidad },
         });
         if (rolPorEspecialidad) {
           usuarioUpdateData.rolId = rolPorEspecialidad.id;
