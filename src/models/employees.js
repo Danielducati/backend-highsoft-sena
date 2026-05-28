@@ -65,6 +65,25 @@ const getById = async (id) => {
   return emp ? formatEmployee(emp) : null;
 };
 
+// Mapeo entre especialidades (categorías) y roles
+const ESPECIALIDAD_A_ROL = {
+  "Barbería": "Barbero",
+  "Cosmetología": "Cosmetóloga",
+  "Estilismo": "Estilista",
+  "Cabello": "Estilista",
+  "Manicura": "Manicurista",
+  "Uñas": "Manicurista",
+  "Masajes": "Masajista",
+};
+
+const ROL_A_ESPECIALIDAD = {
+  "Barbero": "Barbería",
+  "Cosmetóloga": "Cosmetología",
+  "Estilista": "Estilismo",
+  "Manicurista": "Manicura",
+  "Masajista": "Masajes",
+};
+
 const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo,
                         telefono, ciudad, especialidad, direccion, fotoPerfil,
                         contrasena, idRol }) => {
@@ -75,8 +94,9 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
   let rolId = idRol;
   if (especialidad && !rolId) {
     // Mapear especialidad a rol (Barbería -> Barbero, etc.)
+    const nombreRol = ESPECIALIDAD_A_ROL[especialidad] || especialidad;
     const rolPorEspecialidad = await prisma.rol.findFirst({
-      where: { nombre: especialidad },
+      where: { nombre: nombreRol },
     });
     if (rolPorEspecialidad) {
       rolId = rolPorEspecialidad.id;
@@ -103,10 +123,10 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
     rolId = rolEmpleado.id;
   }
 
-  // Si no se proporcionó especialidad pero sí rol, usar el nombre del rol como especialidad
+  // Si no se proporcionó especialidad pero sí rol, mapear rol a especialidad
   let especialidadFinal = especialidad;
   if (!especialidadFinal && rolExiste) {
-    especialidadFinal = rolExiste.nombre;
+    especialidadFinal = ROL_A_ESPECIALIDAD[rolExiste.nombre] || rolExiste.nombre;
   }
 
   // Documento duplicado
@@ -216,8 +236,9 @@ const update = async (id, data) => {
 
       // Si cambia la especialidad, actualizar el rol del usuario
       if (data.especialidad !== undefined) {
+        const nombreRol = ESPECIALIDAD_A_ROL[data.especialidad] || data.especialidad;
         const rolPorEspecialidad = await tx.rol.findFirst({
-          where: { nombre: data.especialidad },
+          where: { nombre: nombreRol },
         });
         if (rolPorEspecialidad) {
           usuarioUpdateData.rolId = rolPorEspecialidad.id;
