@@ -29,6 +29,7 @@ const rolesRoutes       = require('./routes/roles.routes.js');
 const authRouter        = require('./routes/auth.routes.js'); 
 const permissionsRoutes = require("./routes/permissions.routes.js");
 const uploadRoutes      = require("./routes/upload.routes.js");
+const syncRoutes        = require("./routes/sync.routes.js");
 
 // ── Registrar rutas ───────────────────────────────────────────
 app.use('/appointments',     appointmentRoutes);
@@ -75,6 +76,9 @@ app.use('/api/auth',         authRouter);
 
 app.use("/upload",           uploadRoutes);
 app.use("/api/upload",       uploadRoutes);
+
+app.use("/sync",             syncRoutes);
+app.use("/api/sync",         syncRoutes);
 
 // ── Iniciar servidor ──────────────────────────────────────────
 app.listen(PORT, () => {
