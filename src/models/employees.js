@@ -97,14 +97,6 @@ const ESPECIALIDAD_A_ROL = {
   "Masajes": "Masajista",
 };
 
-const ROL_A_ESPECIALIDAD = {
-  "Barbero": "Barbería",
-  "Cosmetóloga": "Cosmetología",
-  "Estilista": "Estilismo",
-  "Manicurista": "Manicura",
-  "Masajista": "Masajes",
-};
-
 const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo,
                         telefono, ciudad, especialidad, direccion, fotoPerfil,
                         contrasena, idRol }) => {
