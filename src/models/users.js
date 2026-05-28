@@ -141,6 +141,15 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
   });
 };
 
+// Mapeo entre roles y especialidades (categorías)
+const ROL_A_ESPECIALIDAD = {
+  "Barbero": "Barbería",
+  "Cosmetóloga": "Cosmetología",
+  "Estilista": "Estilismo",
+  "Manicurista": "Manicura",
+  "Masajista": "Masajes",
+};
+
 const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo, contrasena }) => {
   return prisma.$transaction(async (tx) => {
 
@@ -223,7 +232,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           correo:          email        || updatedUsuario.correo,
           telefono:        phone        ?? (updatedUsuario.telefono || null),
           fotoPerfil:      photo        ?? (cliente?.foto_perfil || null),
-          especialidad:    updatedUsuario.rol.nombre, // Sincronizar especialidad con rol
+          especialidad:    ROL_A_ESPECIALIDAD[updatedUsuario.rol.nombre] || updatedUsuario.rol.nombre, // Sincronizar especialidad con rol
           estado:          updatedUsuario.estado,
           usuarioId:       updatedUsuario.id,
         }
@@ -241,7 +250,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
 
       // Si cambió el rol, actualizar la especialidad del empleado
       if (role !== undefined) {
-        empleadoUpdateData.especialidad = updatedUsuario.rol.nombre;
+        empleadoUpdateData.especialidad = ROL_A_ESPECIALIDAD[updatedUsuario.rol.nombre] || updatedUsuario.rol.nombre;
       }
 
       await tx.empleado.update({
