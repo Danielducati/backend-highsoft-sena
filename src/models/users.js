@@ -143,15 +143,37 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
 
 const update = async (id, { firstName, lastName, documentType, document, email, phone, role, photo, contrasena }) => {
   return prisma.$transaction(async (tx) => {
+
+    // Validar documento duplicado en empleados (excluyendo el usuario actual)
+    if (documentType && document) {
+      const empDup = await tx.empleado.findFirst({
+        where: {
+          tipoDocumento:   documentType,
+          numeroDocumento: document,
+          NOT: { usuarioId: Number(id) },
+        },
+      });
+      if (empDup) throw new Error(`Ya existe un usuario con ${documentType} ${document}`);
+
+      const cliDup = await tx.cliente.findFirst({
+        where: {
+          tipo_documento:   documentType,
+          numero_documento: document,
+          NOT: { fk_id_usuario: Number(id) },
+        },
+      });
+      if (cliDup) throw new Error(`Ya existe un usuario con ${documentType} ${document}`);
+    }
+
     const usuarioData = {};
 
     if (email     !== undefined) usuarioData.correo   = email;
     if (firstName !== undefined) usuarioData.nombre   = firstName ?? null;
     if (lastName  !== undefined) usuarioData.apellido = lastName  ?? null;
     if (phone     !== undefined) usuarioData.telefono = phone     ?? null;
-    // foto_perfil solo si el campo existe en el schema (puede no estar en producción)
-    if (photo !== undefined && photo !== null) {
-      try { usuarioData.foto_perfil = photo; } catch { /* campo no existe, ignorar */ }
+    // foto_perfil: actualizar siempre que venga definido (incluso vacío para borrarla)
+    if (photo !== undefined) {
+      try { usuarioData.foto_perfil = photo ?? ""; } catch { /* campo no existe, ignorar */ }
     }
 
     if (contrasena && contrasena.trim() !== "") {

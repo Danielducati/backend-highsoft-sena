@@ -23,8 +23,9 @@ function formatClient(c, usuario = null) {
   const nombre = c.nombre || usuario?.nombre || "";
   const apellido = c.apellido || usuario?.apellido || "";
   const telefono = c.telefono || usuario?.telefono || "";
-  // Para la foto, priorizar la del Cliente si existe, sino la del Usuario
-  const fotoPerfil = c.foto_perfil || usuario?.foto_perfil || "";
+  // Para la foto, usar la del Cliente (puede ser null/vacío si la quitaron)
+  // Solo hacer fallback al usuario si el cliente nunca tuvo foto (undefined)
+  const fotoPerfil = c.foto_perfil !== undefined ? (c.foto_perfil ?? "") : (usuario?.foto_perfil ?? "");
   // Para el estado, usar el del Cliente (es la fuente de verdad para el módulo de clientes)
   const estado = c.Estado;
 
@@ -184,7 +185,7 @@ const update = async (id, { firstName, lastName, documentType, document,
     }
   }
 
-  // Documento duplicado en otro cliente
+  // Documento duplicado en otro cliente o empleado
   if (documentType && document) {
     const existeDoc = await prisma.cliente.findFirst({
       where: {
@@ -195,6 +196,16 @@ const update = async (id, { firstName, lastName, documentType, document,
     });
     if (existeDoc) {
       throw new Error(`Ya existe un cliente con ${documentType} ${document}`);
+    }
+
+    const existeEmp = await prisma.empleado.findFirst({
+      where: {
+        tipoDocumento:   documentType,
+        numeroDocumento: document,
+      },
+    });
+    if (existeEmp) {
+      throw new Error(`Ya existe un empleado con ${documentType} ${document}`);
     }
   }
 
@@ -210,8 +221,9 @@ const update = async (id, { firstName, lastName, documentType, document,
       Estado:           estado       ?? "Activo",
     };
 
-    if (image !== undefined && image !== null) {
-      updateData.foto_perfil = image;
+    if (image !== undefined) {
+      // foto_perfil no acepta null en BD, usar string vacío para "sin foto"
+      updateData.foto_perfil = image ?? "";
     }
 
     const c = await tx.cliente.update({
@@ -228,8 +240,9 @@ const update = async (id, { firstName, lastName, documentType, document,
       if (lastName !== undefined) usuarioUpdateData.apellido = lastName;
       if (phone !== undefined) usuarioUpdateData.telefono = phone;
       if (email !== undefined) usuarioUpdateData.correo = email;
-      if (image !== undefined && image !== null) {
-        usuarioUpdateData.foto_perfil = image;
+      if (image !== undefined) {
+        // foto_perfil en Usuario sí acepta null (campo opcional)
+        usuarioUpdateData.foto_perfil = image ?? null;
       }
       if (estado !== undefined) {
         usuarioUpdateData.estado = estado;
