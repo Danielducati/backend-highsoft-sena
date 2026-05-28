@@ -222,8 +222,8 @@ const update = async (id, { firstName, lastName, documentType, document,
     };
 
     if (image !== undefined) {
-      // null significa "quitar la foto", string vacío también
-      updateData.foto_perfil = image ?? null;
+      // foto_perfil no acepta null en BD, usar string vacío para "sin foto"
+      updateData.foto_perfil = image ?? "";
     }
 
     const c = await tx.cliente.update({
@@ -241,7 +241,7 @@ const update = async (id, { firstName, lastName, documentType, document,
       if (phone !== undefined) usuarioUpdateData.telefono = phone;
       if (email !== undefined) usuarioUpdateData.correo = email;
       if (image !== undefined) {
-        // null significa "quitar la foto"
+        // foto_perfil en Usuario sí acepta null (campo opcional)
         usuarioUpdateData.foto_perfil = image ?? null;
       }
       if (estado !== undefined) {
