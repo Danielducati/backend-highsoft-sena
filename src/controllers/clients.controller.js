@@ -45,7 +45,17 @@ const getMiPerfil = async (req, res) => {
       });
     }
 
-    res.json(cliente);
+    // Devolver estructura consistente con lo que espera el frontend
+    res.json({
+      nombre:           cliente.nombre           ?? "",
+      apellido:         cliente.apellido         ?? "",
+      tipo_documento:   cliente.tipo_documento   ?? "",
+      numero_documento: cliente.numero_documento ?? "",
+      correo:           cliente.correo           ?? "",
+      telefono:         cliente.telefono         ?? "",
+      direccion:        cliente.direccion        ?? "",
+      foto_perfil:      cliente.foto_perfil      ?? "",
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 
