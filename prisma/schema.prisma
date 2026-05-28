@@ -45,6 +45,7 @@ model Usuario {
   nombre              String?              @db.VarChar(100)
   apellido            String?              @db.VarChar(100)
   telefono            String?              @db.VarChar(20)
+  registroViaGoogle   Boolean              @default(false) @map("registro_via_google")
   Cliente             Cliente[]
   empleado            Empleado[]
   horarioChanges      HorarioHistorial[]

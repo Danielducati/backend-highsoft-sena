@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
 const prisma = require("../config/prisma");
 const { sendWelcomeEmail, sendResetPasswordEmail } = require("../config/email");
+const { parseGoogleProfile, isPlaceholderName } = require("../utils/googleProfile");
 
 const JWT_SECRET = process.env.JWT_SECRET || "highlife_secret_2024";
 const googleClient = process.env.GOOGLE_CLIENT_ID
@@ -93,11 +94,12 @@ const loginWithGoogle = async (req, res) => {
   try {
     if (!googleClient || !process.env.GOOGLE_CLIENT_ID) {
       return res.status(500).json({
-        error: "Google OAuth no está configurado en el servidor",
+        error:
+          "Google OAuth no está configurado en el servidor. Agrega GOOGLE_CLIENT_ID en las variables de entorno (Web client ID de Firebase > Authentication > Google).",
       });
     }
 
-    const { idToken } = req.body;
+    const { idToken, nombre: nombreBody, apellido: apellidoBody, foto: fotoBody, displayName } = req.body;
     if (!idToken) {
       return res.status(400).json({ error: "idToken es requerido" });
     }
@@ -113,10 +115,12 @@ const loginWithGoogle = async (req, res) => {
     }
 
     const correo = payload.email.trim().toLowerCase();
-    const nombreGoogle =
-      (payload.given_name || payload.name || "Usuario").trim();
-    const apellidoGoogle = (payload.family_name || "").trim();
-    const fotoGoogle = (payload.picture || "").trim();
+    const perfilGoogle = parseGoogleProfile(payload, {
+      nombre: nombreBody,
+      apellido: apellidoBody,
+      foto: fotoBody,
+      displayName,
+    });
 
     let usuario = await prisma.usuario.findUnique({
       where: { correo },
@@ -144,22 +148,58 @@ const loginWithGoogle = async (req, res) => {
           contrasena: hashedRandom,
           estado: "Activo",
           rolId: rolCliente.id,
+          registroViaGoogle: true,
+          nombre: perfilGoogle.nombre,
+          apellido: perfilGoogle.apellido,
+          foto_perfil: perfilGoogle.foto || null,
           Cliente: {
             create: {
-              nombre: nombreGoogle || "Usuario",
-              apellido: apellidoGoogle || "",
+              nombre: perfilGoogle.nombre,
+              apellido: perfilGoogle.apellido,
               correo,
               telefono: null,
               tipo_documento: null,
               numero_documento: null,
               direccion: null,
-              foto_perfil: fotoGoogle,
+              foto_perfil: perfilGoogle.foto || "",
               Estado: "Activo",
             },
           },
         },
         include: { rol: true },
       });
+    } else {
+      const cliente = await prisma.cliente.findFirst({
+        where: { fk_id_usuario: usuario.id },
+      });
+
+      if (cliente && (isPlaceholderName(cliente.nombre, cliente.apellido) || !cliente.apellido?.trim())) {
+        await prisma.cliente.update({
+          where: { PK_id_cliente: cliente.PK_id_cliente },
+          data: {
+            nombre: perfilGoogle.nombre,
+            apellido: perfilGoogle.apellido || cliente.apellido || "",
+            foto_perfil: perfilGoogle.foto || cliente.foto_perfil || "",
+          },
+        });
+      }
+
+      const usuarioSinNombreReal = isPlaceholderName(usuario.nombre, usuario.apellido);
+      if (!usuario.registroViaGoogle || usuarioSinNombreReal) {
+        await prisma.usuario.update({
+          where: { id: usuario.id },
+          data: {
+            registroViaGoogle: true,
+            nombre: perfilGoogle.nombre,
+            apellido: perfilGoogle.apellido,
+            ...(perfilGoogle.foto ? { foto_perfil: perfilGoogle.foto } : {}),
+          },
+        });
+        usuario = await prisma.usuario.findUnique({
+          where: { id: usuario.id },
+          include: { rol: true },
+        });
+      }
     }
 
     if (usuario.estado !== "Activo") {
@@ -180,9 +220,9 @@ const loginWithGoogle = async (req, res) => {
       { expiresIn: "8h" }
     );
 
-    let nombre = "";
-    let apellido = "";
-    let foto = fotoGoogle;
+    let nombre = perfilGoogle.nombre;
+    let apellido = perfilGoogle.apellido;
+    let foto = perfilGoogle.foto;
 
     const empleado = await prisma.empleado.findFirst({
       where: { usuarioId: usuario.id },
@@ -190,18 +230,18 @@ const loginWithGoogle = async (req, res) => {
     });
 
     if (empleado) {
-      nombre = empleado.nombre ?? "";
-      apellido = empleado.apellido ?? "";
-      foto = empleado.fotoPerfil ?? "";
+      nombre = empleado.nombre ?? nombre;
+      apellido = empleado.apellido ?? apellido;
+      foto = empleado.fotoPerfil ?? foto;
     } else {
       const cliente = await prisma.cliente.findFirst({
         where: { fk_id_usuario: usuario.id },
         select: { nombre: true, apellido: true, foto_perfil: true },
       });
       if (cliente) {
-        nombre = cliente.nombre ?? "";
-        apellido = cliente.apellido ?? "";
-        foto = cliente.foto_perfil ?? fotoGoogle;
+        nombre = cliente.nombre ?? nombre;
+        apellido = cliente.apellido ?? apellido;
+        foto = cliente.foto_perfil || foto;
       }
     }
 
@@ -214,6 +254,7 @@ const loginWithGoogle = async (req, res) => {
         nombre,
         apellido,
         foto,
+        registroViaGoogle: Boolean(usuario.registroViaGoogle),
       },
     });
   } catch (err) {
@@ -460,9 +501,45 @@ const me = async (req, res) => {
       rol:      usuario.rol.nombre,
       permisos: permisosNombres,
       perfil,
+      registroViaGoogle: Boolean(usuario.registroViaGoogle),
     });
   } catch (err) {
     console.error("❌ Error en /auth/me:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── ESTABLECER CONTRASEÑA (cuentas creadas con Google, sin contraseña previa) ─
+const establecerContrasena = async (req, res) => {
+  try {
+    const { nuevaPassword } = req.body;
+    if (!nuevaPassword) {
+      return res.status(400).json({ error: "La nueva contraseña es requerida" });
+    }
+    if (nuevaPassword.length < 6) {
+      return res.status(400).json({ error: "La contraseña debe tener mínimo 6 caracteres" });
+    }
+
+    const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
+    if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    if (!usuario.registroViaGoogle) {
+      return res.status(400).json({
+        error: "Para cambiar la contraseña usa el formulario con tu contraseña actual",
+      });
+    }
+
+    const hashed = await bcrypt.hash(nuevaPassword, 10);
+    await prisma.usuario.update({
+      where: { id: req.usuario.id },
+      data: { contrasena: hashed },
+    });
+
+    res.json({
+      message: "Contraseña creada correctamente. Ya puedes entrar con correo y contraseña.",
+      ok: true,
+    });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
@@ -500,4 +577,5 @@ module.exports = {
   resetPassword,
   me,
   changePassword,
+  establecerContrasena,
 };
