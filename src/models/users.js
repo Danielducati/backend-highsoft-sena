@@ -229,7 +229,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
         }
       });
     } else if (empleado) {
-      const empleadoUpdateData: any = {
+      const empleadoUpdateData = {
         ...(firstName !== undefined && { nombre: firstName || "" }),
         ...(lastName !== undefined && { apellido: lastName || "" }),
         ...(documentType !== undefined && { tipoDocumento: documentType }),
