@@ -1,25 +1,6 @@
 // Script para sincronizar especialidades de empleados con roles de usuarios
 const prisma = require('../src/config/prisma');
 
-// Mapeo entre especialidades (categorías) y roles
-const ESPECIALIDAD_A_ROL = {
-  "Barbería": "Barbero",
-  "Cosmetología": "Cosmetóloga",
-  "Estilismo": "Estilista",
-  "Cabello": "Estilista",
-  "Manicura": "Manicurista",
-  "Uñas": "Manicurista",
-  "Masajes": "Masajista",
-};
-
-const ROL_A_ESPECIALIDAD = {
-  "Barbero": "Barbería",
-  "Cosmetóloga": "Cosmetología",
-  "Estilista": "Estilismo",
-  "Manicurista": "Manicura",
-  "Masajista": "Masajes",
-};
-
 async function syncEmployeeSpecialtyWithRole() {
   console.log('🔄 Iniciando sincronización de especialidades y roles...\n');
 
@@ -50,7 +31,7 @@ async function syncEmployeeSpecialtyWithRole() {
 
       const rolActual = empleado.usuario.rol.nombre;
       const especialidadActual = empleado.especialidad;
-      const especialidadEsperada = ROL_A_ESPECIALIDAD[rolActual] || rolActual;
+      const especialidadEsperada = rolActual; // Especialidad = Rol (sin mapeo)
 
       console.log(`👤 ${empleado.nombre} ${empleado.apellido}:`);
       console.log(`   Rol actual: ${rolActual}`);

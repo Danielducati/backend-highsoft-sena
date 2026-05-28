@@ -141,6 +141,7 @@ const create = async ({ firstName, lastName, documentType, document, email, phon
   });
 };
 
+
 // Mapeo entre roles y especialidades (categorías)
 const ROL_A_ESPECIALIDAD = {
   "Barbero": "Barbería",
@@ -232,7 +233,7 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           correo:          email        || updatedUsuario.correo,
           telefono:        phone        ?? (updatedUsuario.telefono || null),
           fotoPerfil:      photo        ?? (cliente?.foto_perfil || null),
-          especialidad:    ROL_A_ESPECIALIDAD[updatedUsuario.rol.nombre] || updatedUsuario.rol.nombre, // Sincronizar especialidad con rol
+          especialidad:    updatedUsuario.rol.nombre, // Especialidad = Rol (sin mapeo)
           estado:          updatedUsuario.estado,
           usuarioId:       updatedUsuario.id,
         }
@@ -248,9 +249,9 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
         ...(photo !== undefined && { fotoPerfil: photo }),
       };
 
-      // Si cambió el rol, actualizar la especialidad del empleado
+      // Si cambió el rol, actualizar la especialidad del empleado (especialidad = rol)
       if (role !== undefined) {
-        empleadoUpdateData.especialidad = ROL_A_ESPECIALIDAD[updatedUsuario.rol.nombre] || updatedUsuario.rol.nombre;
+        empleadoUpdateData.especialidad = updatedUsuario.rol.nombre;
       }
 
       await tx.empleado.update({

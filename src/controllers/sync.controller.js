@@ -1,13 +1,13 @@
 // src/controllers/sync.controller.js
 const prisma = require("../config/prisma");
 
-// Mapeo entre roles y especialidades (categorías)
+// Mapeo entre roles y especialidades - AHORA SON IGUALES
 const ROL_A_ESPECIALIDAD = {
-  "Barbero": "Barbería",
-  "Cosmetóloga": "Cosmetología",
-  "Estilista": "Estilismo",
-  "Manicurista": "Manicura",
-  "Masajista": "Masajes",
+  "Barbero": "Barbero",
+  "Cosmetóloga": "Cosmetóloga",
+  "Estilista": "Estilista",
+  "Manicurista": "Manicurista",
+  "Masajista": "Masajista",
 };
 
 /**
