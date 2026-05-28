@@ -4,6 +4,15 @@ const bcrypt = require("bcryptjs");
 
 const COLORS = ["#78D1BD","#A78BFA","#60A5FA","#FBBF24","#F87171","#34D399","#FB923C","#E879F9"];
 
+// Mapeo entre roles y especialidades (categorías)
+const ROL_A_ESPECIALIDAD = {
+  "Barbero": "Barbería",
+  "Cosmetóloga": "Cosmetología",
+  "Estilista": "Estilismo",
+  "Manicurista": "Manicura",
+  "Masajista": "Masajes",
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function formatEmployee(emp, usuario = null, idx = 0) {
   // Combinar datos de ambas tablas (usar el que tenga información)
@@ -15,12 +24,21 @@ function formatEmployee(emp, usuario = null, idx = 0) {
   // Para el estado, usar el del Empleado (es la fuente de verdad para el módulo de empleados)
   const estado = emp.estado;
 
+  // Sincronizar especialidad con el rol del usuario
+  let especialidad = emp.especialidad;
+  if (usuario?.rol?.nombre) {
+    const especialidadDelRol = ROL_A_ESPECIALIDAD[usuario.rol.nombre];
+    if (especialidadDelRol) {
+      especialidad = especialidadDelRol;
+    }
+  }
+
   return {
     id:              String(emp.id),
     name:            `${nombre} ${apellido}`,
     nombre:          nombre,
     apellido:        apellido,
-    specialty:       emp.especialidad ?? "",
+    specialty:       especialidad ?? "",
     email:           emp.correo       ?? "",
     phone:           telefono         ?? "",
     tipoDocumento:   emp.tipoDocumento ?? "",
@@ -61,8 +79,11 @@ const getAll = async ({ soloActivos = false } = {}) => {
 };
 
 const getById = async (id) => {
-  const emp = await prisma.empleado.findUnique({ where: { id: Number(id) } });
-  return emp ? formatEmployee(emp) : null;
+  const emp = await prisma.empleado.findUnique({ 
+    where: { id: Number(id) },
+    include: { usuario: { include: { rol: true } } }
+  });
+  return emp ? formatEmployee(emp, emp.usuario) : null;
 };
 
 // Mapeo entre especialidades (categorías) y roles

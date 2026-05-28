@@ -9,9 +9,10 @@ const getMiPerfil = async (req, res) => {
   try {
     const emp = await prisma.empleado.findFirst({
       where: { usuarioId: req.usuario.id },
+      include: { usuario: { include: { rol: true } } }
     });
     if (!emp) return res.status(404).json({ error: "Perfil de empleado no encontrado" });
-    res.json(employeesModel.formatEmployee(emp));
+    res.json(employeesModel.formatEmployee(emp, emp.usuario));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
