@@ -7,7 +7,8 @@ const getAll = async ({ soloActivos = true }) => {
     include: {
       _count: {
         select: { servicios: true }
-      }
+      },
+      rol: true
     },
     orderBy: { nombre: "asc" },
   });
@@ -18,6 +19,8 @@ const getAll = async ({ soloActivos = true }) => {
     descripcion:   cat.descripcion,
     color:         cat.color,
     estado:        cat.estado,
+    rolId:         cat.rolId,
+    rolNombre:     cat.rol?.nombre,
     servicesCount: cat._count.servicios,
   }));
 };
@@ -28,7 +31,8 @@ const getById = async (id) => {
     include: {
       _count: {
         select: { servicios: true }
-      }
+      },
+      rol: true
     },
   });
 
@@ -40,17 +44,20 @@ const getById = async (id) => {
     descripcion:   cat.descripcion,
     color:         cat.color,
     estado:        cat.estado,
+    rolId:         cat.rolId,
+    rolNombre:     cat.rol?.nombre,
     servicesCount: cat._count.servicios,
   };
 };
 
-const create = async ({ nombre, descripcion, color }) => {
+const create = async ({ nombre, descripcion, color, rolId }) => {
   const cat = await prisma.categoriaServicio.create({
     data: {
       nombre,
       descripcion,
       color,
       estado: "Activo",
+      ...(rolId && { rolId: Number(rolId) }),
     },
   });
 
@@ -60,10 +67,11 @@ const create = async ({ nombre, descripcion, color }) => {
     descripcion: cat.descripcion,
     color:       cat.color,
     estado:      cat.estado,
+    rolId:       cat.rolId,
   };
 };
 
-const update = async (id, { nombre, descripcion, color, estado }) => {
+const update = async (id, { nombre, descripcion, color, estado, rolId }) => {
   const cat = await prisma.categoriaServicio.update({
     where: { id },
     data: {
@@ -71,6 +79,7 @@ const update = async (id, { nombre, descripcion, color, estado }) => {
       ...(descripcion !== undefined && { descripcion }),
       ...(color !== undefined && { color }),
       ...(estado !== undefined && { estado }),
+      ...(rolId !== undefined && { rolId: rolId ? Number(rolId) : null }),
     },
   });
 
@@ -80,6 +89,7 @@ const update = async (id, { nombre, descripcion, color, estado }) => {
     descripcion: cat.descripcion,
     color:       cat.color,
     estado:      cat.estado,
+    rolId:       cat.rolId,
   };
 };
 

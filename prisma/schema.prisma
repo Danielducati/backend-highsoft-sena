@@ -7,12 +7,13 @@ datasource db {
 }
 
 model Rol {
-  id            Int          @id @default(autoincrement()) @map("PK_id_rol")
-  nombre        String       @map("Nombre") @db.VarChar(100)
+  id            Int                 @id @default(autoincrement()) @map("PK_id_rol")
+  nombre        String              @map("Nombre") @db.VarChar(100)
   descripcion   String?
-  estado        String       @default("Activo") @map("Estado") @db.VarChar(30)
+  estado        String              @default("Activo") @map("Estado") @db.VarChar(30)
   rolesPermisos RolPermiso[]
   usuarios      Usuario[]
+  categorias    CategoriaServicio[]
 
   @@map("Roles")
 }
@@ -126,6 +127,8 @@ model CategoriaServicio {
   descripcion String?    @db.VarChar(600)
   color       String?    @db.VarChar(20)
   estado      String     @default("Activo") @map("Estado") @db.VarChar(30)
+  rolId       Int?       @map("FK_id_rol")
+  rol         Rol?       @relation(fields: [rolId], references: [id], onUpdate: NoAction)
   servicios   Servicio[]
 
   @@map("Categoria_servicios")
