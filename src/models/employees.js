@@ -71,8 +71,19 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
   const passwordBase = contrasena?.trim() || numeroDocumento || "empleado123";
   const hashed = await bcrypt.hash(passwordBase, 10);
 
-  // Si no se pasa idRol, buscar el rol "Empleado" por nombre
+  // Si se proporciona especialidad, buscar el rol correspondiente
   let rolId = idRol;
+  if (especialidad && !rolId) {
+    // Mapear especialidad a rol (Barbería -> Barbero, etc.)
+    const rolPorEspecialidad = await prisma.rol.findFirst({
+      where: { nombre: especialidad },
+    });
+    if (rolPorEspecialidad) {
+      rolId = rolPorEspecialidad.id;
+    }
+  }
+
+  // Si no se pasa idRol ni especialidad, buscar el rol "Empleado" por nombre
   if (!rolId) {
     const rolEmpleado = await prisma.rol.findFirst({
       where: { nombre: { in: ["Empleado", "empleado"] } },
@@ -90,6 +101,12 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
     });
     if (!rolEmpleado) throw new Error("No se encontró el rol 'Empleado' en la base de datos");
     rolId = rolEmpleado.id;
+  }
+
+  // Si no se proporcionó especialidad pero sí rol, usar el nombre del rol como especialidad
+  let especialidadFinal = especialidad;
+  if (!especialidadFinal && rolExiste) {
+    especialidadFinal = rolExiste.nombre;
   }
 
   // Documento duplicado
@@ -126,7 +143,7 @@ const create = async ({ nombre, apellido, tipoDocumento, numeroDocumento, correo
         correo,
         telefono:   telefono   ?? null,
         ciudad:     ciudad     ?? null,
-        especialidad: especialidad ?? null,
+        especialidad: especialidadFinal ?? null,
         direccion:  direccion  ?? null,
         fotoPerfil: fotoPerfil ?? null,
         estado:     "Activo",
@@ -195,6 +212,16 @@ const update = async (id, data) => {
       }
       if (data.estado !== undefined) {
         usuarioUpdateData.estado = data.estado;
+      }
+
+      // Si cambia la especialidad, actualizar el rol del usuario
+      if (data.especialidad !== undefined) {
+        const rolPorEspecialidad = await tx.rol.findFirst({
+          where: { nombre: data.especialidad },
+        });
+        if (rolPorEspecialidad) {
+          usuarioUpdateData.rolId = rolPorEspecialidad.id;
+        }
       }
 
       if (Object.keys(usuarioUpdateData).length > 0) {

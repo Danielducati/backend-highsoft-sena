@@ -223,22 +223,30 @@ const update = async (id, { firstName, lastName, documentType, document, email, 
           correo:          email        || updatedUsuario.correo,
           telefono:        phone        ?? (updatedUsuario.telefono || null),
           fotoPerfil:      photo        ?? (cliente?.foto_perfil || null),
+          especialidad:    updatedUsuario.rol.nombre, // Sincronizar especialidad con rol
           estado:          updatedUsuario.estado,
           usuarioId:       updatedUsuario.id,
         }
       });
     } else if (empleado) {
+      const empleadoUpdateData: any = {
+        ...(firstName !== undefined && { nombre: firstName || "" }),
+        ...(lastName !== undefined && { apellido: lastName || "" }),
+        ...(documentType !== undefined && { tipoDocumento: documentType }),
+        ...(document !== undefined && { numeroDocumento: document }),
+        ...(email !== undefined && { correo: email || "" }),
+        ...(phone !== undefined && { telefono: phone }),
+        ...(photo !== undefined && { fotoPerfil: photo }),
+      };
+
+      // Si cambió el rol, actualizar la especialidad del empleado
+      if (role !== undefined) {
+        empleadoUpdateData.especialidad = updatedUsuario.rol.nombre;
+      }
+
       await tx.empleado.update({
         where: { id: empleado.id },
-        data: {
-          ...(firstName !== undefined && { nombre: firstName || "" }),
-          ...(lastName !== undefined && { apellido: lastName || "" }),
-          ...(documentType !== undefined && { tipoDocumento: documentType }),
-          ...(document !== undefined && { numeroDocumento: document }),
-          ...(email !== undefined && { correo: email || "" }),
-          ...(phone !== undefined && { telefono: phone }),
-          ...(photo !== undefined && { fotoPerfil: photo ?? "" }),
-        },
+        data: empleadoUpdateData,
       });
     }
 
