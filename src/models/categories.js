@@ -7,7 +7,8 @@ const getAll = async ({ soloActivos = true }) => {
     include: {
       _count: {
         select: { servicios: true }
-      }
+      },
+      rol: true
     },
     orderBy: { nombre: "asc" },
   });
@@ -18,8 +19,8 @@ const getAll = async ({ soloActivos = true }) => {
     descripcion:   cat.descripcion,
     color:         cat.color,
     estado:        cat.estado,
-    rolId:         cat.rolId || null,
-    rolNombre:     null,
+    rolId:         cat.rolId,
+    rolNombre:     cat.rol?.nombre,
     servicesCount: cat._count.servicios,
   }));
 };
@@ -30,7 +31,8 @@ const getById = async (id) => {
     include: {
       _count: {
         select: { servicios: true }
-      }
+      },
+      rol: true
     },
   });
 
@@ -42,61 +44,21 @@ const getById = async (id) => {
     descripcion:   cat.descripcion,
     color:         cat.color,
     estado:        cat.estado,
-    rolId:         cat.rolId || null,
-    rolNombre:     null,
+    rolId:         cat.rolId,
+    rolNombre:     cat.rol?.nombre,
     servicesCount: cat._count.servicios,
   };
 };
 
 const create = async ({ nombre, descripcion, color, rolId }) => {
-  const data = {
-    nombre,
-    descripcion,
-    color,
-    estado: "Activo",
-  };
-  
-  // Solo agregar rolId si el campo existe en el schema
-  if (rolId !== undefined && rolId !== null && rolId !== "") {
-    try {
-      data.rolId = Number(rolId);
-    } catch (e) {
-      // Ignorar si el campo no existe en la BD
-    }
-  }
-
-  const cat = await prisma.categoriaServicio.create({ data });
-
-  return {
-    id:          cat.id,
-    nombre:      cat.nombre,
-    descripcion: cat.descripcion,
-    color:       cat.color,
-    estado:      cat.estado,
-    rolId:       cat.rolId || null,
-  };
-};
-
-const update = async (id, { nombre, descripcion, color, estado, rolId }) => {
-  const data = {};
-  
-  if (nombre !== undefined) data.nombre = nombre;
-  if (descripcion !== undefined) data.descripcion = descripcion;
-  if (color !== undefined) data.color = color;
-  if (estado !== undefined) data.estado = estado;
-  
-  // Solo agregar rolId si el campo existe en el schema
-  if (rolId !== undefined) {
-    try {
-      data.rolId = rolId && rolId !== "" ? Number(rolId) : null;
-    } catch (e) {
-      // Ignorar si el campo no existe en la BD
-    }
-  }
-
-  const cat = await prisma.categoriaServicio.update({
-    where: { id },
-    data,
+  const cat = await prisma.categoriaServicio.create({
+    data: {
+      nombre,
+      descripcion,
+      color,
+      estado: "Activo",
+      ...(rolId && { rolId: Number(rolId) }),
+    },
   });
 
   return {
@@ -105,7 +67,29 @@ const update = async (id, { nombre, descripcion, color, estado, rolId }) => {
     descripcion: cat.descripcion,
     color:       cat.color,
     estado:      cat.estado,
-    rolId:       cat.rolId || null,
+    rolId:       cat.rolId,
+  };
+};
+
+const update = async (id, { nombre, descripcion, color, estado, rolId }) => {
+  const cat = await prisma.categoriaServicio.update({
+    where: { id },
+    data: {
+      ...(nombre !== undefined && { nombre }),
+      ...(descripcion !== undefined && { descripcion }),
+      ...(color !== undefined && { color }),
+      ...(estado !== undefined && { estado }),
+      ...(rolId !== undefined && { rolId: rolId ? Number(rolId) : null }),
+    },
+  });
+
+  return {
+    id:          cat.id,
+    nombre:      cat.nombre,
+    descripcion: cat.descripcion,
+    color:       cat.color,
+    estado:      cat.estado,
+    rolId:       cat.rolId,
   };
 };
 
