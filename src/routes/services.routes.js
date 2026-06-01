@@ -4,15 +4,16 @@ const prisma  = require("../config/prisma");
 
 function formatService(s) {
   return {
-    id:          s.id,
-    name:        s.nombre,
-    descripcion: s.descripcion ?? "",
-    duration:    s.duracion    ?? 0,
-    price:       Number(s.precio ?? 0),
-    category:    s.categoria?.nombre ?? "",
-    categoryId:  s.categoriaId,
-    imagen:      s.imagenServicio ?? "",
-    estado:      s.estado,
+    id:            s.id,
+    name:          s.nombre,
+    descripcion:   s.descripcion ?? "",
+    duration:      s.duracion    ?? 0,
+    price:         Number(s.precio ?? 0),
+    category:      s.categoria?.rol?.nombre ?? s.categoria?.nombre ?? "",
+    categoryId:    s.categoriaId,
+    categoryRolId: s.categoria?.rolId ?? null,
+    imagen:        s.imagenServicio ?? "",
+    estado:        s.estado,
   };
 }
 
