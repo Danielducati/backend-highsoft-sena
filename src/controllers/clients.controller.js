@@ -26,6 +26,8 @@ const getMiPerfil = async (req, res) => {
 
     // Si no existe, crearlo automáticamente con datos básicos del usuario
     if (!cliente) {
+      console.log(`⚠️ Cliente no encontrado para usuario ${req.usuario.id}, creando perfil automáticamente...`);
+      
       const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
       if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
 
@@ -43,10 +45,14 @@ const getMiPerfil = async (req, res) => {
           fk_id_usuario:    usuario.id,
         },
       });
+      
+      console.log(`✅ Perfil de cliente creado automáticamente: ID ${cliente.PK_id_cliente}`);
     }
 
     // Devolver estructura consistente con lo que espera el frontend
+    // IMPORTANTE: Incluir PK_id_cliente para que el frontend pueda crear citas
     res.json({
+      PK_id_cliente:    cliente.PK_id_cliente,  // ← AGREGADO: Campo necesario para crear citas
       nombre:           cliente.nombre           ?? "",
       apellido:         cliente.apellido         ?? "",
       tipo_documento:   cliente.tipo_documento   ?? "",
@@ -56,7 +62,10 @@ const getMiPerfil = async (req, res) => {
       direccion:        cliente.direccion        ?? "",
       foto_perfil:      cliente.foto_perfil      ?? "",
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { 
+    console.error("❌ Error en getMiPerfil:", err);
+    res.status(500).json({ error: err.message }); 
+  }
 };
 
 const getOne = async (req, res) => {
