@@ -2,11 +2,15 @@
 const prisma = require("../config/prisma");
 
 function formatService(s) {
+  // Si la categoría tiene un rol asociado, usar el nombre del rol como categoría
+  // Esto asegura que coincida con la especialidad del empleado (que es el nombre del rol)
+  const categoryName = s.categoria?.rol?.nombre || s.categoria?.nombre || "";
+  
   return {
     id:          String(s.id),
     name:        s.nombre,
     description: s.descripcion  ?? "",
-    category:    s.categoria?.nombre ?? "",
+    category:    categoryName,
     categoryId:  s.categoriaId,
     duration:    s.duracion  ?? 60,
     price:       s.precio    ? Number(s.precio) : 0,
@@ -18,7 +22,11 @@ function formatService(s) {
 const getAll = async ({ soloActivos = true } = {}) => {
   const servicios = await prisma.servicio.findMany({
     where:   soloActivos ? { estado: "Activo" } : {},
-    include: { categoria: true },
+    include: { 
+      categoria: {
+        include: { rol: true }
+      }
+    },
     orderBy: { nombre: "asc" },
   });
   return servicios.map(formatService);
@@ -27,7 +35,11 @@ const getAll = async ({ soloActivos = true } = {}) => {
 const getById = async (id) => {
   const s = await prisma.servicio.findUnique({
     where:   { id: Number(id) },
-    include: { categoria: true },
+    include: { 
+      categoria: {
+        include: { rol: true }
+      }
+    },
   });
   return s ? formatService(s) : null;
 };
@@ -43,7 +55,11 @@ const create = async ({ nombre, descripcion, categoriaId, duracion, precio, imag
       imagenServicio: imagenServicio ?? null,
       estado:         "Activo",
     },
-    include: { categoria: true },
+    include: { 
+      categoria: {
+        include: { rol: true }
+      }
+    },
   });
   return formatService(s);
 };
@@ -60,7 +76,11 @@ const update = async (id, data) => {
       imagenServicio: data.imagenServicio ?? null,
       estado:         data.estado         ?? "Activo",
     },
-    include: { categoria: true },
+    include: { 
+      categoria: {
+        include: { rol: true }
+      }
+    },
   });
   return formatService(s);
 };
