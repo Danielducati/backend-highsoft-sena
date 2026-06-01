@@ -6,6 +6,13 @@ function formatService(s) {
   // Esto asegura que coincida con la especialidad del empleado (que es el nombre del rol)
   const categoryName = s.categoria?.rol?.nombre || s.categoria?.nombre || "";
   
+  // Log temporal para debugging
+  console.log(`[formatService] Servicio: ${s.nombre}`);
+  console.log(`  - Categoría nombre: ${s.categoria?.nombre}`);
+  console.log(`  - Categoría rolId: ${s.categoria?.rolId}`);
+  console.log(`  - Rol nombre: ${s.categoria?.rol?.nombre}`);
+  console.log(`  - Category final: ${categoryName}`);
+  
   return {
     id:          String(s.id),
     name:        s.nombre,
