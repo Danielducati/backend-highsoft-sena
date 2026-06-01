@@ -158,6 +158,11 @@ const updateCategory = async (req, res) => {
     if (color !== undefined) updateData.color = color ?? null;
     if (estado !== undefined) updateData.estado = estado;
 
+    const rolId = req.body.rolId;
+    if (rolId !== undefined) {
+      updateData.rolId = rolId ? Number(rolId) : null;
+    }
+
     const cat = await categoriesModel.update(id, updateData);
 
     if (!cat) return res.status(404).json({ error: "Categoría no encontrada" });
