@@ -22,7 +22,7 @@ router.get("/", async (req, res) => {
     const soloActivos = req.query.all !== "true";
     const data = await prisma.servicio.findMany({
       where:   soloActivos ? { estado: "Activo" } : {},
-      include: { categoria: true },
+      include: { categoria: { include: { rol: true } } },
       orderBy: { nombre: "asc" },
     });
     res.json(data.map(formatService));
