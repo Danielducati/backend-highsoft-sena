@@ -27,6 +27,7 @@ function formatEmployee(emp, usuario = null, idx = 0) {
     nombre:          nombre,
     apellido:        apellido,
     specialty:       especialidad ?? "",
+    specialtyRolId:  usuario?.rolId ?? null, // ID del rol para comparación
     email:           emp.correo       ?? "",
     phone:           telefono         ?? "",
     tipoDocumento:   emp.tipoDocumento ?? "",

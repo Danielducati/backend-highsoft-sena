@@ -70,10 +70,16 @@ const getDisponibles = async (req, res) => {
     const fechaLocal = new Date(Date.UTC(y, m - 1, d));
 
     // Empleados que tienen al menos un horario registrado en esa fecha
-    const horarios = await prisma.horario.findMany({
-      where: { fecha: fechaLocal },
-      include: { empleado: true },
-    });
+      const horarios = await prisma.horario.findMany({
+        where: { fecha: fechaLocal },
+        include: {
+          empleado: {
+            include: {
+              usuario: { select: { rolId: true } }
+            }
+          }
+        },
+      });
 
     // Novedades aprobadas que cubren esta fecha
     const novedadesAprobadas = await prisma.novedad.findMany({
@@ -139,13 +145,14 @@ const getDisponibles = async (req, res) => {
       if (empleadosBloqueados.has(h.empleadoId)) return; // ← excluir por novedad
       seen.add(h.empleadoId);
       empleados.push({
-        id:        String(h.empleado.id),
-        name:      `${h.empleado.nombre} ${h.empleado.apellido}`,
-        specialty: h.empleado.especialidad ?? "",
-        color:     COLORS[idx % COLORS.length],
-        isActive:  true,
-        horaInicio: h.horaInicio.toISOString().slice(11, 16),
-        horaFinal:  h.horaFinal.toISOString().slice(11, 16),
+        id:             String(h.empleado.id),
+        name:           `${h.empleado.nombre} ${h.empleado.apellido}`,
+        specialty:      h.empleado.especialidad ?? "",
+        specialtyRolId: h.empleado.usuario?.rolId ?? null, // ← agregar
+        color:          COLORS[idx % COLORS.length],
+        isActive:       true,
+        horaInicio:     h.horaInicio.toISOString().slice(11, 16),
+        horaFinal:      h.horaFinal.toISOString().slice(11, 16),
       });
     });
 
