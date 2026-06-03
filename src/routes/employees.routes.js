@@ -1,7 +1,7 @@
 const express = require("express");
 const router  = express.Router();
 const ctrl    = require("../controllers/employees.controller");
-const { verificarToken, soloAdmin } = require("../middlewares/auth.middleware");
+const { verificarToken, adminOrPermission } = require("../middlewares/auth.middleware");
 
 router.get("/",                    ctrl.getAll);
 router.get("/mi-perfil",           verificarToken,               ctrl.getMiPerfil);
@@ -9,9 +9,9 @@ router.put("/mi-perfil",           verificarToken,               ctrl.updateMiPe
 router.get("/mis-servicios",       verificarToken,               ctrl.getMisServicios);
 router.get("/disponibles",         verificarToken,               ctrl.getDisponibles);
 router.get("/:id",                 ctrl.getOne);
-router.post("/",                   verificarToken, soloAdmin, ctrl.create);
-router.put("/:id",                 verificarToken, soloAdmin, ctrl.update);
-router.patch("/:id/reset-password",verificarToken, soloAdmin, ctrl.resetPassword);
-router.delete("/:id",              verificarToken, soloAdmin, ctrl.remove);
+router.post("/",                   verificarToken, adminOrPermission("empleados.crear"), ctrl.create);
+router.put("/:id",                 verificarToken, adminOrPermission("empleados.editar"), ctrl.update);
+router.patch("/:id/reset-password",verificarToken, adminOrPermission("empleados.editar"), ctrl.resetPassword);
+router.delete("/:id",              verificarToken, adminOrPermission("empleados.eliminar"), ctrl.remove);
 
 module.exports = router;

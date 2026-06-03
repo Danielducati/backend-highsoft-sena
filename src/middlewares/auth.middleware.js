@@ -22,13 +22,43 @@ try {
 }
 };
 
-// ── Admin only ────────────────────────────────────────────────
+const isSystemAdminRol = (rol) => {
+  const r = (rol ?? "").toLowerCase();
+  return r === "admin" || r === "administrador";
+};
+
+// ── Admin only (roles base del sistema) ─────────────────────────
 const soloAdmin = (req, res, next) => {
-  const rol = req.usuario?.rol;
-  if (rol !== "Administrador" && rol !== "Admin")
+  if (!isSystemAdminRol(req.usuario?.rol))
     return res.status(403).json({ error: "Acceso restringido a administradores" });
   next();
 };
+
+/** Admin del sistema O permiso específico del rol en BD */
+const adminOrPermission = (permission) => async (req, res, next) => {
+  if (!req.usuario)
+    return res.status(401).json({ error: "No autenticado" });
+  if (isSystemAdminRol(req.usuario.rol)) return next();
+  return hasPermission(permission)(req, res, next);
+};
+
+async function roleHasPermission(rolId, permission) {
+  if (!rolId) return false;
+  const result = await prisma.rolPermiso.findFirst({
+    where: { rolId, permiso: { nombre: permission } },
+  });
+  return Boolean(result);
+}
+
+/** Empleado que solo ve/gestiona sus propias citas (barbero), no gerente */
+async function isScopedEmployeeUser(req) {
+  const rol = (req.usuario?.rol ?? "").toLowerCase();
+  if (["admin", "administrador", "cliente"].includes(rol)) return false;
+  const canSeeAll =
+    (await roleHasPermission(req.usuario.rolId, "empleados.ver")) ||
+    (await roleHasPermission(req.usuario.rolId, "clientes.ver"));
+  return !canSeeAll;
+}
 
 // ── One or more roles ─────────────────────────────────────────
 const soloRoles = (...roles) => (req, res, next) => {
@@ -84,4 +114,14 @@ try {
 // Alias para no romper código existente
 const tienePermiso = hasPermission;
 
-module.exports = { verificarToken, soloAdmin, soloRoles, hasPermission, tienePermiso };
+module.exports = {
+  verificarToken,
+  soloAdmin,
+  soloRoles,
+  hasPermission,
+  tienePermiso,
+  adminOrPermission,
+  roleHasPermission,
+  isScopedEmployeeUser,
+  isSystemAdminRol,
+};
