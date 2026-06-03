@@ -3,6 +3,7 @@ const appointmentsModel = require("../models/appointments");
 const prisma = require("../config/prisma");
 const { appointmentErrors } = require("../utils/errorMessages");
 const { checkMultipleEmployeesAvailability } = require("../utils/employeeAvailability");
+const { isSystemAdminRol, isScopedEmployeeUser } = require("../middlewares/auth.middleware");
 
 const getAll = async (req, res) => {
   try {
@@ -12,11 +13,10 @@ const getAll = async (req, res) => {
     const rol = (req.usuario?.rol ?? "").toLowerCase();
     console.log("📋 [GET ALL APPOINTMENTS] Rol del usuario:", rol);
 
-    // Si es un rol de empleado (cualquier rol que no sea Admin o Cliente)
-    const esEmpleado = !["admin", "administrador", "cliente"].includes(rol);
-    console.log("📋 [GET ALL APPOINTMENTS] Es empleado:", esEmpleado);
+    const scopedEmployee = await isScopedEmployeeUser(req);
+    console.log("📋 [GET ALL APPOINTMENTS] Empleado con alcance limitado:", scopedEmployee);
     
-    if (esEmpleado) {
+    if (scopedEmployee) {
       // Filtrar solo las citas donde este empleado está asignado
       const empRecord = await prisma.empleado.findFirst({
         where: { usuarioId: req.usuario.id },
@@ -25,7 +25,7 @@ const getAll = async (req, res) => {
       console.log("📋 [GET ALL APPOINTMENTS] Registro de empleado:", empRecord);
       if (empRecord) empleadoId = empRecord.id;
       console.log("📋 [GET ALL APPOINTMENTS] EmpleadoId:", empleadoId);
-    } else if (!["admin", "administrador"].includes(rol)) {
+    } else if (!isSystemAdminRol(req.usuario?.rol) && rol === "cliente") {
       // Es cliente
       console.log("📋 [GET ALL APPOINTMENTS] Es cliente, buscando registro...");
       const clienteRecord = await prisma.cliente.findFirst({

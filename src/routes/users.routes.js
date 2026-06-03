@@ -6,7 +6,7 @@ const {
   createUser, updateUser, updateStatus, deleteUser,
   getMiPerfil, updateMiPerfil,
 } = require("../controllers/users.controller");
-const { verificarToken, soloAdmin }                          = require("../middlewares/auth.middleware");
+const { verificarToken, adminOrPermission }                  = require("../middlewares/auth.middleware");
 const { validateCreateUser, validateUpdateUser,
         validateUserId, validateUserStatus }                  = require("../middlewares/validate.middleware");
 
@@ -15,11 +15,11 @@ router.get("/roles",        verificarToken,                                     
 router.get("/mi-perfil",    verificarToken,                                              getMiPerfil);
 router.patch("/mi-perfil",  verificarToken,                                              updateMiPerfil);
 
-router.get("/",             verificarToken, soloAdmin,                                   getAllUsers);
-router.get("/:id",          verificarToken, soloAdmin, validateUserId,                   getUserById);
-router.post("/",            verificarToken, soloAdmin, validateCreateUser,               createUser);
-router.put("/:id",          verificarToken, soloAdmin, validateUserId, validateUpdateUser, updateUser);
-router.patch("/:id/status", verificarToken, soloAdmin, validateUserId, validateUserStatus, updateStatus);
-router.delete("/:id",       verificarToken, soloAdmin, validateUserId,                   deleteUser);
+router.get("/",             verificarToken, adminOrPermission("usuarios.ver"),     getAllUsers);
+router.get("/:id",          verificarToken, adminOrPermission("usuarios.ver"), validateUserId, getUserById);
+router.post("/",            verificarToken, adminOrPermission("usuarios.crear"), validateCreateUser, createUser);
+router.put("/:id",          verificarToken, adminOrPermission("usuarios.editar"), validateUserId, validateUpdateUser, updateUser);
+router.patch("/:id/status", verificarToken, adminOrPermission("usuarios.editar"), validateUserId, validateUserStatus, updateStatus);
+router.delete("/:id",       verificarToken, adminOrPermission("usuarios.eliminar"), validateUserId, deleteUser);
 
 module.exports = router;

@@ -2,7 +2,7 @@
 const express = require("express");
 const router  = express.Router();
 const ctrl    = require("../controllers/clients.controller");
-const { verificarToken, soloAdmin, hasPermission }        = require("../middlewares/auth.middleware");
+const { verificarToken, adminOrPermission, hasPermission } = require("../middlewares/auth.middleware");
 const { validateCreateClient, validateUpdateClient,
         validateClientId }                                 = require("../middlewares/validate.middleware");
 
@@ -16,7 +16,7 @@ router.patch("/mi-perfil",   verificarToken,                                    
 router.put("/:id",           verificarToken, validateClientId,
                                              validateUpdateClient,
                                              hasPermission("clientes.editar"), ctrl.update);
-router.patch("/:id/status",  verificarToken, soloAdmin, validateClientId,      ctrl.setStatus);
-router.delete("/:id",        verificarToken, soloAdmin, validateClientId,      ctrl.remove);
+router.patch("/:id/status",  verificarToken, adminOrPermission("clientes.editar"), validateClientId, ctrl.setStatus);
+router.delete("/:id",        verificarToken, adminOrPermission("clientes.eliminar"), validateClientId, ctrl.remove);
 
 module.exports = router;
