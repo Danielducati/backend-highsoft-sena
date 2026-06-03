@@ -10,6 +10,14 @@ const googleClient = process.env.GOOGLE_CLIENT_ID
   ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
   : null;
 
+async function getPermisosNombresByRolId(rolId) {
+  const rows = await prisma.rolPermiso.findMany({
+    where:   { rolId },
+    include: { permiso: true },
+  });
+  return rows.map((rp) => rp.permiso.nombre);
+}
+
 // ── LOGIN ──────────────────────────────────────────
 const login = async (req, res) => {
   const { correo, contrasena } = req.body;
@@ -72,8 +80,11 @@ const login = async (req, res) => {
       }
     }
 
+    const permisos = await getPermisosNombresByRolId(usuario.rolId);
+
     return res.json({
       token,
+      permisos,
       usuario: {
         id:      usuario.id,
         correo:  usuario.correo,
@@ -245,8 +256,11 @@ const loginWithGoogle = async (req, res) => {
       }
     }
 
+    const permisos = await getPermisosNombresByRolId(usuario.rolId);
+
     return res.json({
       token,
+      permisos,
       usuario: {
         id: usuario.id,
         correo: usuario.correo,
