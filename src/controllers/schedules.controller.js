@@ -489,6 +489,64 @@ const getAvailableTimeSlots = async (req, res) => {
   }
 };
 
+// 🩺 DIAGNOSTIC ENDPOINT - Get schedules for specific employee
+const getDiagnosticEmployee = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    
+    console.log('🩺 [DIAGNOSTIC] Checking schedules for employeeId:', employeeId);
+    
+    // Verificar si el empleado existe
+    const empleado = await prisma.empleado.findUnique({
+      where: { id: Number(employeeId) },
+      include: { usuario: { select: { correo: true, estado: true } } }
+    });
+    
+    if (!empleado) {
+      return res.status(404).json({ 
+        error: "Empleado no encontrado",
+        employeeId,
+        exists: false
+      });
+    }
+    
+    console.log('🩺 [DIAGNOSTIC] Employee found:', empleado.nombre, empleado.apellido);
+    
+    // Obtener TODOS los horarios del empleado (sin filtro de fecha)
+    const horarios = await prisma.horario.findMany({
+      where: { empleadoId: Number(employeeId) },
+      orderBy: { fecha: 'asc' }
+    });
+    
+    console.log('🩺 [DIAGNOSTIC] Total schedules found:', horarios.length);
+    
+    // Formatear horarios por semana
+    const formatted = formatSchedule(horarios.map(h => ({ ...h, empleado })));
+    
+    res.json({
+      employeeId: Number(employeeId),
+      employeeName: `${empleado.nombre} ${empleado.apellido}`,
+      employeeStatus: empleado.estado,
+      userEmail: empleado.usuario?.correo,
+      userStatus: empleado.usuario?.estado,
+      totalScheduleRecords: horarios.length,
+      totalWeeks: formatted.length,
+      schedules: formatted,
+      rawSchedules: horarios.map(h => ({
+        id: h.id,
+        fecha: h.fecha.toISOString().split('T')[0],
+        dia: h.diaSemana,
+        horaInicio: h.horaInicio.toISOString().slice(11, 16),
+        horaFinal: h.horaFinal.toISOString().slice(11, 16),
+      })),
+      message: "Diagnostic completed"
+    });
+  } catch (err) {
+    console.error('🩺 [DIAGNOSTIC] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = { 
   getAll, 
   create, 
@@ -501,4 +559,6 @@ module.exports = {
   getHistoryStats,
   // Endpoint para calendario de citas
   getAvailableTimeSlots,
+  // Diagnostic endpoint
+  getDiagnosticEmployee,
 };

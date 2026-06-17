@@ -9,6 +9,9 @@ const { verificarToken, tienePermiso } = require("../middlewares/auth.middleware
 // GET /schedules/available-slots - Franjas horarias disponibles (debe ir ANTES de /:employeeId)
 router.get("/available-slots", verificarToken, schedulesCtrl.getAvailableTimeSlots);
 
+// GET /schedules/diagnostic/:employeeId - Diagnostic endpoint to check employee schedules
+router.get("/diagnostic/:employeeId", verificarToken, schedulesCtrl.getDiagnosticEmployee);
+
 // GET /schedules
 router.get("/", verificarToken, tienePermiso("horarios.ver"), schedulesCtrl.getAll);
 
