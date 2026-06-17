@@ -10,8 +10,8 @@ function formatEmployee(emp, usuario = null, idx = 0) {
   const nombre = emp.nombre || usuario?.nombre || "";
   const apellido = emp.apellido || usuario?.apellido || "";
   const telefono = emp.telefono || usuario?.telefono || "";
-  // Para la foto, priorizar la del Empleado si existe, sino la del Usuario
-  const fotoPerfil = emp.fotoPerfil || usuario?.foto_perfil || "";
+  // Para la foto, usar la del Empleado si está definida (incluso null), sino la del Usuario
+  const fotoPerfil = emp.fotoPerfil !== undefined ? (emp.fotoPerfil ?? "") : (usuario?.foto_perfil ?? "");
   // Para el estado, usar el del Empleado (es la fuente de verdad para el módulo de empleados)
   const estado = emp.estado;
 
@@ -216,8 +216,8 @@ const update = async (id, data) => {
       if (data.nombre !== undefined) usuarioUpdateData.nombre = data.nombre;
       if (data.apellido !== undefined) usuarioUpdateData.apellido = data.apellido;
       if (data.telefono !== undefined) usuarioUpdateData.telefono = data.telefono;
-      if (data.fotoPerfil !== undefined && data.fotoPerfil !== null && data.fotoPerfil !== "") {
-        usuarioUpdateData.foto_perfil = data.fotoPerfil;
+      if (data.fotoPerfil !== undefined) {
+        usuarioUpdateData.foto_perfil = data.fotoPerfil ?? null;
       }
       if (data.estado !== undefined) {
         usuarioUpdateData.estado = data.estado;
