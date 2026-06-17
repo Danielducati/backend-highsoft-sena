@@ -547,6 +547,60 @@ const getDiagnosticEmployee = async (req, res) => {
   }
 };
 
+// 👤 GET MY SCHEDULES - For logged-in employee (no permission required)
+const getMySchedules = async (req, res) => {
+  try {
+    const userId = req.usuario.id;
+    const userRole = req.usuario.rol?.toLowerCase();
+    
+    console.log('👤 [MY-SCHEDULES] User ID:', userId, 'Role:', userRole);
+    
+    // Si es empleado, buscar su empleado asociado
+    let empleadoId = null;
+    
+    if (userRole === 'empleado' || userRole === 'barbero') {
+      const empleado = await prisma.empleado.findFirst({
+        where: { usuarioId: userId }
+      });
+      
+      if (!empleado) {
+        return res.status(404).json({ 
+          error: "No se encontró perfil de empleado para este usuario",
+          schedules: []
+        });
+      }
+      
+      empleadoId = empleado.id;
+      console.log('👤 [MY-SCHEDULES] Employee ID:', empleadoId);
+    } else {
+      // Si es admin, devolver todos los horarios
+      console.log('👤 [MY-SCHEDULES] Admin user, returning all schedules');
+      const horarios = await prisma.horario.findMany({
+        include: { empleado: true },
+        orderBy: { fecha: "desc" },
+      });
+      return res.json(formatSchedule(horarios));
+    }
+    
+    // Obtener SOLO los horarios del empleado logueado
+    const horarios = await prisma.horario.findMany({
+      where: { empleadoId },
+      include: { empleado: true },
+      orderBy: { fecha: "desc" },
+    });
+    
+    console.log('👤 [MY-SCHEDULES] Found', horarios.length, 'schedule records');
+    
+    const formatted = formatSchedule(horarios);
+    console.log('👤 [MY-SCHEDULES] Formatted into', formatted.length, 'weeks');
+    
+    res.json(formatted);
+  } catch (err) {
+    console.error('👤 [MY-SCHEDULES] Error:', err);
+    res.status(500).json({ error: scheduleErrors.SERVER_ERROR });
+  }
+};
+
 module.exports = { 
   getAll, 
   create, 
@@ -561,4 +615,6 @@ module.exports = {
   getAvailableTimeSlots,
   // Diagnostic endpoint
   getDiagnosticEmployee,
+  // My schedules endpoint (for employees)
+  getMySchedules,
 };

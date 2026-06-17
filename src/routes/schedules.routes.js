@@ -12,6 +12,9 @@ router.get("/available-slots", verificarToken, schedulesCtrl.getAvailableTimeSlo
 // GET /schedules/diagnostic/:employeeId - Diagnostic endpoint to check employee schedules
 router.get("/diagnostic/:employeeId", verificarToken, schedulesCtrl.getDiagnosticEmployee);
 
+// GET /schedules/my-schedules - Get schedules for logged-in employee (NO PERMISSION REQUIRED)
+router.get("/my-schedules", verificarToken, schedulesCtrl.getMySchedules);
+
 // GET /schedules
 router.get("/", verificarToken, tienePermiso("horarios.ver"), schedulesCtrl.getAll);
 
