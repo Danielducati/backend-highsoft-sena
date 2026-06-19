@@ -4,6 +4,7 @@ const prisma = require("../config/prisma");
 const { appointmentErrors } = require("../utils/errorMessages");
 const { checkMultipleEmployeesAvailability } = require("../utils/employeeAvailability");
 const { isSystemAdminRol, isScopedEmployeeUser } = require("../middlewares/auth.middleware");
+const { sendAppointmentConfirmationEmail } = require("../config/email");
 
 const getAll = async (req, res) => {
   try {
@@ -348,6 +349,71 @@ const create = async (req, res) => {
       notas,
       servicios
     });
+
+    // ── Enviar email de confirmación al cliente ──────────────────────────
+    try {
+      // Obtener datos del cliente (nombre + correo)
+      const clienteData = await prisma.cliente.findUnique({
+        where: { PK_id_cliente: Number(cliente) },
+        select: {
+          nombre: true,
+          apellido: true,
+          correo: true,
+          fk_id_usuario: true,
+        },
+      });
+
+      // Si el cliente no tiene correo propio, buscar en el usuario
+      let emailDestino = clienteData?.correo || null;
+      if (!emailDestino && clienteData?.fk_id_usuario) {
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: clienteData.fk_id_usuario },
+          select: { correo: true },
+        });
+        emailDestino = usuario?.correo || null;
+      }
+
+      if (emailDestino) {
+        // Obtener nombres de servicios y empleados para el correo
+        const serviciosDetalle = await Promise.all(
+          servicios.map(async (s) => {
+            const servicio = await prisma.servicio.findUnique({
+              where: { id: Number(s.servicio) },
+              select: { name: true },
+            });
+            const empleado = s.empleado_usuario
+              ? await prisma.empleado.findUnique({
+                  where: { id: Number(s.empleado_usuario) },
+                  select: { nombre: true, apellido: true },
+                })
+              : null;
+            return {
+              nombre: servicio?.name || "Servicio",
+              empleado: empleado ? `${empleado.nombre} ${empleado.apellido}` : "",
+            };
+          })
+        );
+
+        const clientName = clienteData
+          ? `${clienteData.nombre} ${clienteData.apellido || ""}`.trim()
+          : "Cliente";
+
+        // Enviar sin await para no bloquear la respuesta
+        sendAppointmentConfirmationEmail(emailDestino, {
+          clientName,
+          fecha,
+          hora,
+          servicios: serviciosDetalle,
+          notas: notas || "",
+        }).catch((err) =>
+          console.error("❌ Error enviando email de confirmación:", err.message)
+        );
+      }
+    } catch (emailErr) {
+      // El email es no-crítico: si falla, la cita ya fue creada
+      console.error("⚠️ No se pudo enviar email de confirmación:", emailErr.message);
+    }
+    // ────────────────────────────────────────────────────────────────────
 
     res.status(201).json({
       ok: true,

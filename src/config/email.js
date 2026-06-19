@@ -202,6 +202,109 @@ const sendResetPasswordEmail = async (to, resetLink) => {
   }
 };
 
+// ── EMAIL DE CONFIRMACIÓN DE CITA ──────────────────────────────────────────
+const sendAppointmentConfirmationEmail = async (to, { clientName, fecha, hora, servicios, notas }) => {
+  if (!to) { console.warn("⚠️ Email del cliente faltante para confirmación de cita"); return false; }
+  try {
+    // Formatear fecha legible
+    const [y, m, d] = fecha.split("-");
+    const fechaLegible = new Date(Number(y), Number(m) - 1, Number(d))
+      .toLocaleDateString("es-CO", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
+    // Formatear hora
+    const [h, min] = hora.split(":");
+    const horaLegible = `${h}:${min}`;
+
+    // Lista de servicios
+    const serviciosHtml = Array.isArray(servicios) && servicios.length > 0
+      ? servicios.map(s =>
+          `<tr>
+            <td style="padding:8px 12px;color:#1a3a2a;border-bottom:1px solid #f0ede8">${s.nombre || s.serviceName || "Servicio"}</td>
+            <td style="padding:8px 12px;color:#6b7c6b;border-bottom:1px solid #f0ede8;text-align:right">${s.empleado || s.employeeName || ""}</td>
+          </tr>`
+        ).join("")
+      : `<tr><td colspan="2" style="padding:8px 12px;color:#6b7c6b">Servicios por confirmar</td></tr>`;
+
+    await sendMail({
+      to,
+      subject: `✅ Confirmación de cita — Highlife Spa & Bar`,
+      text: `Hola ${clientName}, tu cita ha sido confirmada para el ${fechaLegible} a las ${horaLegible}.`,
+      html: `
+        <!DOCTYPE html><html><head><style>
+          body{font-family:Arial,sans-serif;background:#f5f0e8;margin:0;padding:0}
+          .c{max-width:600px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08)}
+          .h{background:linear-gradient(135deg,#1a3a2a,#2a5a40);color:#fff;padding:36px 24px;text-align:center}
+          .h h1{margin:0 0 6px;font-size:26px;letter-spacing:-0.5px}
+          .h p{margin:0;opacity:0.8;font-size:13px}
+          .b{padding:36px 30px}
+          .b h2{color:#1a3a2a;margin:0 0 6px}
+          .b p{color:#6b7c6b;line-height:1.7;margin:0 0 20px}
+          .card{background:#f9f7f4;border-radius:10px;padding:20px 24px;margin:20px 0;border:1px solid #ece9e3}
+          .card-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:12px}
+          .card-row:last-child{margin-bottom:0}
+          .card-label{font-size:11px;color:#8a9e8d;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;min-width:70px;padding-top:1px}
+          .card-value{font-size:14px;color:#1a3a2a;font-weight:600}
+          table{width:100%;border-collapse:collapse;margin-top:8px}
+          th{text-align:left;padding:8px 12px;font-size:11px;color:#8a9e8d;text-transform:uppercase;letter-spacing:0.08em;background:#f0ede8}
+          .badge{display:inline-block;background:#edf7f4;color:#1a5c3a;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+          .note{background:#fffbf0;border-left:3px solid #c8a96e;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0;color:#7a6030;font-size:13px}
+          .footer{background:#f9f7f4;padding:20px 24px;text-align:center;color:#8a9e8d;font-size:12px;border-top:1px solid #ece9e3}
+          .footer a{color:#1a3a2a;text-decoration:none}
+        </style></head><body>
+          <div class="c">
+            <div class="h">
+              <h1>✨ Highlife Spa & Bar</h1>
+              <p>Confirmación de cita</p>
+            </div>
+            <div class="b">
+              <h2>¡Hola, ${clientName}!</h2>
+              <p>Tu cita ha sido <strong style="color:#1a5c3a">confirmada exitosamente</strong>. Aquí tienes los detalles:</p>
+
+              <div class="card">
+                <div class="card-row">
+                  <span class="card-label">📅 Fecha</span>
+                  <span class="card-value">${fechaLegible.charAt(0).toUpperCase() + fechaLegible.slice(1)}</span>
+                </div>
+                <div class="card-row">
+                  <span class="card-label">🕐 Hora</span>
+                  <span class="card-value">${horaLegible}</span>
+                </div>
+                <div class="card-row">
+                  <span class="card-label">📍 Lugar</span>
+                  <span class="card-value">Highlife Spa & Bar · Laureles, Unicentro</span>
+                </div>
+              </div>
+
+              <p style="font-size:13px;font-weight:600;color:#1a3a2a;margin-bottom:4px">Servicios agendados</p>
+              <table>
+                <thead><tr>
+                  <th>Servicio</th>
+                  <th style="text-align:right">Profesional</th>
+                </tr></thead>
+                <tbody>${serviciosHtml}</tbody>
+              </table>
+
+              ${notas ? `<div class="note"><strong>📝 Notas:</strong> ${notas}</div>` : ""}
+
+              <p style="margin-top:24px;font-size:13px;color:#6b7c6b">
+                Si necesitas cancelar o reprogramar tu cita, por favor contáctanos con al menos <strong>24 horas de anticipación</strong>.
+              </p>
+            </div>
+            <div class="footer">
+              <p>© 2025 Highlife Spa & Bar · <a href="mailto:highlifespa.bar@gmail.com">highlifespa.bar@gmail.com</a></p>
+              <p style="margin-top:4px">📞 +57 323 2875383 · 📍 Laureles, Unicentro, Medellín</p>
+            </div>
+          </div>
+        </body></html>`,
+    });
+    console.log("✅ Email de confirmación de cita enviado a:", to);
+    return true;
+  } catch (err) {
+    console.error("❌ Error enviando email de confirmación de cita:", err.message);
+    return false;
+  }
+};
+
 // ── Test ────────────────────────────────────────────────────────────────────
 const testEmailConnection = async () => {
   try {
@@ -214,4 +317,4 @@ const testEmailConnection = async () => {
   }
 };
 
-module.exports = { sendWelcomeEmail, sendResetPasswordEmail, testEmailConnection, verifyConnection };
+module.exports = { sendWelcomeEmail, sendResetPasswordEmail, sendAppointmentConfirmationEmail, testEmailConnection, verifyConnection };
