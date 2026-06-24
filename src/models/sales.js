@@ -3,6 +3,7 @@ const prisma = require("../config/prisma");
 
 function formatVenta(v) {
   const primerItem = v.Venta_detalle?.[0];
+  const totalCantidad = (v.Venta_detalle ?? []).reduce((s, d) => s + Number(d.cantidad ?? 1), 0);
 
   return {
     id:          v.PK_id_venta_encabezado,
@@ -10,7 +11,7 @@ function formatVenta(v) {
                   ? `${v.Cliente.nombre} ${v.Cliente.apellido}`
                   : "—",
     Servicio:    (v.Venta_detalle ?? []).map(d => d.servicio?.nombre ?? "").filter(Boolean).join(", ") || "—",
-    Cantidad:    primerItem?.cantidad        ?? 1,
+    Cantidad:    totalCantidad,
     Precio:      Number(primerItem?.precio   ?? 0),
     Subtotal:    (v.Venta_detalle ?? []).reduce((s, d) => s + Number(d.subtotal ?? 0), 0),
     metodo_pago: v.metodo_pago  ?? "",
