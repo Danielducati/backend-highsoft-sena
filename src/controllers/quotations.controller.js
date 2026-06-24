@@ -266,6 +266,7 @@ const updateEstado = async (req, res) => {
         });
 
         for (const detalle of cotizacion.detalles) {
+          const cantidad = Number(detalle.cantidad ?? 1) || 1;
           // Usar empleado guardado en la cotización si existe
           let empleadoAsignado = empleadosMap[detalle.servicioId]
             ? Number(empleadosMap[detalle.servicioId])
@@ -324,14 +325,16 @@ const updateEstado = async (req, res) => {
             }
           }
 
-          await prisma.agendamientoDetalle.create({
-            data: {
-              citaId:     cita.id,
-              servicioId: detalle.servicioId,
-              empleadoId: empleadoAsignado ?? null,
-              precio:     detalle.precio ? Number(detalle.precio) : 0,
-            },
-          });
+          for (let i = 0; i < cantidad; i++) {
+            await prisma.agendamientoDetalle.create({
+              data: {
+                citaId:     cita.id,
+                servicioId: detalle.servicioId,
+                empleadoId: empleadoAsignado ?? null,
+                precio:     detalle.precio ? Number(detalle.precio) : 0,
+              },
+            });
+          }
         }
 
         console.log(`[updateEstado] Cita #${cita.id} creada para cotización #${id}`);
